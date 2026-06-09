@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="ta">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta name="description" content="Tamil AI Assistant — Internet இல்லாமலும் வேலை செய்யும் தமிழ் AI. Chat, PDF Analysis, AI Agent. Offline, CPU-friendly."/>
+<title>தமிழ் AI Assistant — Offline AI for Tamil Users</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&family=Noto+Sans+Tamil:wght@400;600;700&display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config={theme:{extend:{fontFamily:{tamil:['Noto Sans Tamil','Inter','sans-serif'],sans:['Inter','sans-serif']},colors:{accent:'#7c5cfc',teal:'#0dd3c5',dark:'#0a0a14',surface:'#12121f'},animation:{'fade-up':'fadeUp 0.7s ease forwards','float':'float 3s ease-in-out infinite'}}},keyframes:{fadeUp:{from:{opacity:0,transform:'translateY(30px)'},to:{opacity:1,transform:'translateY(0)'}},float:{0:{transform:'translateY(0)'},'50%':{transform:'translateY(-10px)'},100:{transform:'translateY(0)'}}}}
+</script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0a0a14;color:#e8e8f0;font-family:'Inter','Noto Sans Tamil',sans-serif;scroll-behavior:smooth}
+.gradient-text{background:linear-gradient(135deg,#7c5cfc,#0dd3c5);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.glass{background:rgba(255,255,255,0.05);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,0.08)}
+.glow{box-shadow:0 0 40px rgba(124,92,252,0.3)}
+.btn-primary{background:linear-gradient(135deg,#7c5cfc,#5a3de8);color:#fff;border:none;cursor:pointer;transition:all .25s;font-family:inherit}
+.btn-primary:hover{transform:translateY(-2px);box-shadow:0 8px 30px rgba(124,92,252,0.5)}
+.btn-ghost{background:transparent;border:1px solid rgba(255,255,255,0.2);color:#e8e8f0;cursor:pointer;transition:all .25s;font-family:inherit}
+.btn-ghost:hover{border-color:#7c5cfc;color:#9b7dff}
+.fade-in{opacity:0;transform:translateY(30px);transition:opacity .7s ease,transform .7s ease}
+.fade-in.visible{opacity:1;transform:translateY(0)}
+::-webkit-scrollbar{width:5px}::-webkit-scrollbar-thumb{background:#5a3de8;border-radius:9999px}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav class="fixed top-0 w-full z-50 glass border-b border-white/5">
+  <div class="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <div class="w-9 h-9 rounded-lg flex items-center justify-center text-xl" style="background:linear-gradient(135deg,#7c5cfc,#0dd3c5)">🤖</div>
+      <span class="font-bold text-lg">தமிழ் AI</span>
+    </div>
+    <div class="hidden md:flex items-center gap-8 text-sm text-gray-400">
+      <a href="#features" class="hover:text-white transition">Features</a>
+      <a href="#how" class="hover:text-white transition">How It Works</a>
+      <a href="#demo" class="hover:text-white transition">Demo</a>
+      <a href="#screenshots" class="hover:text-white transition">Screenshots</a>
+    </div>
+    <a href="#download" class="btn-primary px-5 py-2 rounded-full text-sm font-semibold">Download Free</a>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="min-h-screen flex items-center justify-center relative overflow-hidden pt-20" id="home">
+  <!-- Background glows -->
+  <div class="absolute top-1/4 left-1/4 w-96 h-96 rounded-full opacity-20 blur-3xl" style="background:radial-gradient(circle,#7c5cfc,transparent)"></div>
+  <div class="absolute bottom-1/4 right-1/4 w-80 h-80 rounded-full opacity-15 blur-3xl" style="background:radial-gradient(circle,#0dd3c5,transparent)"></div>
+
+  <div class="max-w-5xl mx-auto px-6 text-center relative z-10">
+    <!-- Badge -->
+    <div class="inline-flex items-center gap-2 glass px-4 py-2 rounded-full text-sm text-teal mb-8" style="color:#0dd3c5;border-color:rgba(13,211,197,0.3)">
+      <span class="w-2 h-2 rounded-full bg-teal-400 animate-pulse" style="background:#0dd3c5"></span>
+      100% Offline · CPU-Friendly · No GPU Needed
+    </div>
+
+    <!-- Headline -->
+    <h1 class="text-5xl md:text-7xl font-black mb-6 leading-tight font-tamil">
+      Internet இல்லாமலும்<br/>
+      <span class="gradient-text">வேலை செய்யும்</span><br/>
+      தமிழ் AI 🤯
+    </h1>
+
+    <p class="text-xl text-gray-400 mb-4 font-tamil">Chat, File Analysis, AI Agent — எல்லாம் Offline</p>
+    <p class="text-base text-gray-500 mb-10 max-w-2xl mx-auto">Understands Tamil · English · Tanglish. Summarize PDFs, analyze documents, and run multi-step AI tasks — all privately on your computer.</p>
+
+    <!-- CTA Buttons -->
+    <div class="flex flex-col sm:flex-row gap-4 justify-center mb-16">
+      <a href="#download" class="btn-primary px-8 py-4 rounded-xl text-lg font-bold flex items-center justify-center gap-2">
+        ⬇️ Download for Windows
+      </a>
+      <a href="#demo" class="btn-ghost px-8 py-4 rounded-xl text-lg font-semibold flex items-center justify-center gap-2">
+        ▶️ Watch Demo
+      </a>
+    </div>
+
+    <!-- Hero Image -->
+    <div class="glass rounded-2xl p-2 glow max-w-3xl mx-auto" style="animation:float 3s ease-in-out infinite">
+      <img src="assets/hero_banner.png" alt="Tamil AI Assistant interface" class="rounded-xl w-full" onerror="this.style.display='none'"/>
+      <div class="rounded-xl p-8 text-center" style="background:linear-gradient(135deg,rgba(124,92,252,0.2),rgba(13,211,197,0.1));display:none" id="hero-fallback">
+        <div class="text-6xl mb-4">🤖</div>
+        <div class="text-2xl font-bold gradient-text font-tamil">தமிழ் AI Assistant</div>
+        <div class="text-gray-400 mt-2">Offline · Fast · Tamil-native</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- STATS BAR -->
+<section class="border-y border-white/5 py-8" style="background:rgba(255,255,255,0.02)">
+  <div class="max-w-5xl mx-auto px-6 grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
+    <div><div class="text-3xl font-black gradient-text">100%</div><div class="text-gray-400 text-sm mt-1">Offline</div></div>
+    <div><div class="text-3xl font-black gradient-text">3</div><div class="text-gray-400 text-sm mt-1">Languages</div></div>
+    <div><div class="text-3xl font-black gradient-text">0</div><div class="text-gray-400 text-sm mt-1">Data Sent Online</div></div>
+    <div><div class="text-3xl font-black gradient-text">CPU</div><div class="text-gray-400 text-sm mt-1">No GPU Needed</div></div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section id="features" class="py-24 px-6">
+  <div class="max-w-6xl mx-auto">
+    <div class="text-center mb-16 fade-in">
+      <p class="text-accent text-sm font-semibold uppercase tracking-widest mb-3" style="color:#9b7dff">Features</p>
+      <h2 class="text-4xl md:text-5xl font-black mb-4">ஏன் <span class="gradient-text">தமிழ் AI</span>?</h2>
+      <p class="text-gray-400 max-w-xl mx-auto">Built specifically for Tamil users — works privately, offline, and understands your language natively.</p>
+    </div>
+
+    <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <!-- Feature cards -->
+      <div class="glass rounded-2xl p-6 fade-in hover:border-accent transition-all duration-300" style="--delay:.1s;transition-delay:.1s;border-color:rgba(124,92,252,0)">
+        <div class="text-4xl mb-4">📡</div>
+        <h3 class="text-xl font-bold mb-2">100% Offline</h3>
+        <p class="text-gray-400 text-sm">WiFi இல்லாமலும் வேலை செய்யும். உங்கள் data எங்கும் போகாது. முழுமையான privacy.</p>
+      </div>
+      <div class="glass rounded-2xl p-6 fade-in hover:border-teal transition-all duration-300" style="transition-delay:.2s;border-color:rgba(13,211,197,0)">
+        <div class="text-4xl mb-4">🗣️</div>
+        <h3 class="text-xl font-bold mb-2">Tamil · English · Tanglish</h3>
+        <p class="text-gray-400 text-sm">"enna panra" என்று type பண்ணினாலும் புரிந்துகொள்ளும். மூன்று மொழிகளிலும் பேசலாம்.</p>
+      </div>
+      <div class="glass rounded-2xl p-6 fade-in" style="transition-delay:.3s">
+        <div class="text-4xl mb-4">📄</div>
+        <h3 class="text-xl font-bold mb-2">PDF & DOCX Analysis</h3>
+        <p class="text-gray-400 text-sm">Upload PDF, DOCX, or TXT files. Ask questions in Tamil and get instant answers from your documents.</p>
+      </div>
+      <div class="glass rounded-2xl p-6 fade-in" style="transition-delay:.4s">
+        <div class="text-4xl mb-4">🤖</div>
+        <h3 class="text-xl font-bold mb-2">AI Agent System</h3>
+        <p class="text-gray-400 text-sm">Multi-step AI tasks. "இந்த PDF analyze பண்ணி summary + translation கொடு" — ஒரே command-ல் செய்யும்.</p>
+      </div>
+      <div class="glass rounded-2xl p-6 fade-in" style="transition-delay:.5s">
+        <div class="text-4xl mb-4">⚡</div>
+        <h3 class="text-xl font-bold mb-2">CPU Optimized</h3>
+        <p class="text-gray-400 text-sm">GPU இல்லாமல் runs ஆகும். Normal laptop-லேயே fast responses. Smart model routing included.</p>
+      </div>
+      <div class="glass rounded-2xl p-6 fade-in" style="transition-delay:.6s">
+        <div class="text-4xl mb-4">🔒</div>
+        <h3 class="text-xl font-bold mb-2">Complete Privacy</h3>
+        <p class="text-gray-400 text-sm">No cloud. No subscriptions. No data collection. உங்கள் conversations உங்கள் computer-லேயே இருக்கும்.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section id="how" class="py-24 px-6" style="background:rgba(255,255,255,0.01)">
+  <div class="max-w-5xl mx-auto">
+    <div class="text-center mb-16 fade-in">
+      <p class="text-sm font-semibold uppercase tracking-widest mb-3" style="color:#0dd3c5">How It Works</p>
+      <h2 class="text-4xl md:text-5xl font-black mb-4">3 <span class="gradient-text">Easy Steps</span></h2>
+    </div>
+
+    <div class="grid md:grid-cols-3 gap-8">
+      <div class="text-center fade-in" style="transition-delay:.1s">
+        <div class="w-20 h-20 rounded-2xl flex items-center justify-center text-4xl mx-auto mb-6 glow" style="background:linear-gradient(135deg,#7c5cfc,#5a3de8)">🚀</div>
+        <div class="text-accent font-black text-5xl mb-2 opacity-30" style="color:#7c5cfc">01</div>
+        <h3 class="text-xl font-bold mb-3">Open App</h3>
+        <p class="text-gray-400 text-sm">Download செய்து install பண்ணு. Double-click பண்ணினால் உடனே start ஆகும். Internet தேவையில்லை.</p>
+      </div>
+      <div class="text-center fade-in" style="transition-delay:.2s">
+        <div class="w-20 h-20 rounded-2xl flex items-center justify-center text-4xl mx-auto mb-6" style="background:linear-gradient(135deg,#0dd3c5,#0891b2)">📁</div>
+        <div class="font-black text-5xl mb-2 opacity-30" style="color:#0dd3c5">02</div>
+        <h3 class="text-xl font-bold mb-3">Upload or Type</h3>
+        <p class="text-gray-400 text-sm">PDF/DOCX upload பண்ணலாம் அல்லது நேரடியாக Tamil/English/Tanglish-ல் type பண்ணலாம்.</p>
+      </div>
+      <div class="text-center fade-in" style="transition-delay:.3s">
+        <div class="w-20 h-20 rounded-2xl flex items-center justify-center text-4xl mx-auto mb-6" style="background:linear-gradient(135deg,#7c5cfc,#0dd3c5)">✨</div>
+        <div class="font-black text-5xl mb-2 opacity-30" style="color:#9b7dff">03</div>
+        <h3 class="text-xl font-bold mb-3">Get Tamil Response</h3>
+        <p class="text-gray-400 text-sm">உடனே Tamil-ல் response கிடைக்கும். Summary, translation, calculation — எல்லாம் instant.</p>
+      </div>
+    </div>
+
+    <!-- Connector dots -->
+    <div class="hidden md:flex justify-center gap-4 mt-4">
+      <div class="w-2 h-2 rounded-full" style="background:#7c5cfc"></div>
+      <div class="w-2 h-2 rounded-full" style="background:#5a3de8"></div>
+      <div class="w-2 h-2 rounded-full" style="background:#0dd3c5"></div>
+    </div>
+  </div>
+</section>
+
+<!-- DEMO VIDEO -->
+<section id="demo" class="py-24 px-6">
+  <div class="max-w-4xl mx-auto text-center">
+    <div class="fade-in mb-12">
+      <p class="text-sm font-semibold uppercase tracking-widest mb-3" style="color:#9b7dff">Live Demo</p>
+      <h2 class="text-4xl md:text-5xl font-black mb-4">பாருங்க <span class="gradient-text">எப்படி வேலை செய்யுது</span></h2>
+      <p class="text-gray-400">WiFi off பண்ணிவிட்டு — real offline demo!</p>
+    </div>
+
+    <div class="glass rounded-2xl p-2 fade-in glow">
+      <!-- YouTube embed placeholder -->
+      <div class="rounded-xl overflow-hidden" style="padding-top:56.25%;position:relative;background:linear-gradient(135deg,rgba(124,92,252,0.2),rgba(13,211,197,0.1))">
+        <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px">
+          <div class="w-20 h-20 rounded-full flex items-center justify-center text-4xl cursor-pointer" style="background:rgba(124,92,252,0.8);box-shadow:0 0 40px rgba(124,92,252,0.5)">▶</div>
+          <div class="font-bold text-lg">Demo Video Coming Soon</div>
+          <div class="text-gray-400 text-sm">Replace with YouTube embed URL</div>
+          <div class="glass px-4 py-2 rounded-full text-xs text-gray-300 font-mono">&lt;iframe src="https://youtube.com/embed/YOUR_VIDEO_ID"&gt;&lt;/iframe&gt;</div>
+        </div>
+      </div>
+    </div>
+    <p class="text-gray-500 text-sm mt-4">📱 Demo shows: WiFi OFF → Open App → Upload PDF → Ask in Tamil → Instant Response</p>
+  </div>
+</section>
+
+<!-- SCREENSHOTS -->
+<section id="screenshots" class="py-24 px-6" style="background:rgba(255,255,255,0.01)">
+  <div class="max-w-6xl mx-auto">
+    <div class="text-center mb-16 fade-in">
+      <p class="text-sm font-semibold uppercase tracking-widest mb-3" style="color:#0dd3c5">Screenshots</p>
+      <h2 class="text-4xl md:text-5xl font-black mb-4"><span class="gradient-text">UI பாருங்க</span></h2>
+    </div>
+
+    <div class="grid md:grid-cols-2 gap-6">
+      <div class="fade-in" style="transition-delay:.1s">
+        <div class="glass rounded-2xl p-2 hover:glow transition-all duration-300">
+          <img src="assets/chat_mockup.png" alt="Tamil AI Chat Interface" class="rounded-xl w-full" onerror="this.parentElement.innerHTML='<div class=\'rounded-xl p-12 text-center\' style=\'background:linear-gradient(135deg,rgba(124,92,252,0.2),rgba(13,211,197,0.1))\'><div class=\'text-5xl mb-4\'>💬</div><div class=\'font-bold\'>Chat Interface</div><div class=\'text-gray-400 text-sm mt-2\'>Tamil · English · Tanglish</div></div>'"/>
+        </div>
+        <p class="text-center text-gray-400 text-sm mt-3">💬 தமிழ் Chat Interface — with Tanglish support</p>
+      </div>
+      <div class="fade-in" style="transition-delay:.2s">
+        <div class="glass rounded-2xl p-2 hover:glow transition-all duration-300">
+          <img src="assets/upload_mockup.png" alt="PDF Upload and Analysis" class="rounded-xl w-full" onerror="this.parentElement.innerHTML='<div class=\'rounded-xl p-12 text-center\' style=\'background:linear-gradient(135deg,rgba(13,211,197,0.15),rgba(124,92,252,0.1))\'><div class=\'text-5xl mb-4\'>📄</div><div class=\'font-bold\'>File Analysis</div><div class=\'text-gray-400 text-sm mt-2\'>PDF · DOCX · TXT</div></div>'"/>
+        </div>
+        <p class="text-center text-gray-400 text-sm mt-3">📄 PDF Upload + Tamil Q&amp;A — instant answers</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- DOWNLOAD CTA -->
+<section id="download" class="py-24 px-6">
+  <div class="max-w-3xl mx-auto text-center fade-in">
+    <div class="glass rounded-3xl p-12 glow" style="border-color:rgba(124,92,252,0.3)">
+      <div class="text-6xl mb-6" style="animation:float 3s ease-in-out infinite;display:inline-block">🤖</div>
+      <h2 class="text-4xl md:text-5xl font-black mb-4 font-tamil">
+        இப்பவே <span class="gradient-text">Download</span> பண்ணு
+      </h2>
+      <p class="text-gray-400 mb-3">தமிழ் AI Assistant — Free Forever. No subscription. No internet.</p>
+      <p class="text-sm text-gray-500 mb-8">Windows 10/11 · 8GB RAM · 10GB Disk · No GPU required</p>
+
+      <div class="flex flex-col sm:flex-row gap-4 justify-center">
+        <a href="#" class="btn-primary px-8 py-4 rounded-xl text-lg font-bold flex items-center justify-center gap-3">
+          <span>⬇️</span>
+          <div class="text-left">
+            <div class="text-xs opacity-80">Download Free</div>
+            <div>Tamil AI for Windows</div>
+          </div>
+        </a>
+        <a href="#" class="btn-ghost px-8 py-4 rounded-xl text-base font-semibold flex items-center justify-center gap-2">
+          📦 View on GitHub
+        </a>
+      </div>
+
+      <div class="flex items-center justify-center gap-6 mt-8 text-xs text-gray-500">
+        <span>✅ Free Forever</span>
+        <span>✅ Open Source</span>
+        <span>✅ No Sign-up</span>
+        <span>✅ Privacy First</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer class="border-t border-white/5 py-12 px-6" style="background:rgba(255,255,255,0.02)">
+  <div class="max-w-6xl mx-auto">
+    <div class="flex flex-col md:flex-row items-center justify-between gap-6">
+      <div class="flex items-center gap-3">
+        <div class="w-8 h-8 rounded-lg flex items-center justify-center text-lg" style="background:linear-gradient(135deg,#7c5cfc,#0dd3c5)">🤖</div>
+        <div>
+          <div class="font-bold font-tamil">தமிழ் AI Assistant</div>
+          <div class="text-xs text-gray-500">Offline AI · Made for Tamil users</div>
+        </div>
+      </div>
+      <div class="flex items-center gap-8 text-sm text-gray-400">
+        <a href="#" class="hover:text-white transition">About</a>
+        <a href="#" class="hover:text-white transition">GitHub</a>
+        <a href="#" class="hover:text-white transition">Contact</a>
+        <a href="#" class="hover:text-white transition">Privacy</a>
+      </div>
+    </div>
+    <div class="border-t border-white/5 mt-8 pt-8 text-center text-xs text-gray-600">
+      © 2026 Tamil AI Assistant. Built with ❤️ for Tamil users. 100% Free & Open Source.
+    </div>
+  </div>
+</footer>
+
+<script>
+// Scroll fade-in animation
+const observer=new IntersectionObserver((entries)=>{entries.forEach(e=>{if(e.isIntersecting){e.target.classList.add('visible')}})},{threshold:.15});
+document.querySelectorAll('.fade-in').forEach(el=>observer.observe(el));
+
+// Hero image fallback
+document.querySelector('img[alt="Tamil AI Assistant interface"]')?.addEventListener('error',function(){
+  document.getElementById('hero-fallback').style.display='block';
+});
+
+// Smooth active nav highlight
+const sections=document.querySelectorAll('section[id]');
+const navLinks=document.querySelectorAll('nav a[href^="#"]');
+window.addEventListener('scroll',()=>{
+  let current='';
+  sections.forEach(s=>{if(window.scrollY>=s.offsetTop-120)current=s.id});
+  navLinks.forEach(a=>{
+    a.style.color=a.getAttribute('href')==='#'+current?'#9b7dff':'';
+  });
+});
+</script>
+</body>
+</html>

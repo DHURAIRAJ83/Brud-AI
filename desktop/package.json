@@ -1,0 +1,36 @@
+{
+  "name": "tamil-ai-desktop",
+  "version": "2.0.0",
+  "description": "Tamil AI Assistant — Desktop App",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder",
+    "dev": "concurrently \"npm run backend\" \"npm run frontend\" \"wait-on http://localhost:3000 && electron .\"",
+    "backend": "cd ../backend && .\\venv\\Scripts\\python.exe main.py",
+    "frontend": "cd ../frontend && npm start"
+  },
+  "build": {
+    "appId": "com.tamilai.assistant",
+    "productName": "Tamil AI Assistant",
+    "directories": { "output": "dist" },
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icon.ico"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "assets/icon.icns"
+    },
+    "linux": {
+      "target": "AppImage",
+      "icon": "assets/icon.png"
+    }
+  },
+  "devDependencies": {
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3",
+    "concurrently": "^8.2.2",
+    "wait-on": "^7.2.0"
+  }
+}

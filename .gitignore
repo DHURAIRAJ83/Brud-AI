@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+venv/
+env/
+.env
+memory.db
+uploads/
+usage_log.jsonl
+*.log
+
+# Node
+node_modules/
+build/
+dist/
+.env.local
+
+# OS
+.DS_Store
+Thumbs.db
