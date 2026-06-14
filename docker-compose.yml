@@ -9,8 +9,7 @@ services:
     ports:
       - "127.0.0.1:8000:8000"
     volumes:
-      - ./backend/agent.db:/app/agent.db
-      - ./backend/memory.db:/app/memory.db
+      - rudran_data:/app/data
       - ./backend/uploads:/app/uploads
       - ./backend/tools/plugins:/app/tools/plugins
       - ./backend/models:/app/models
@@ -18,6 +17,9 @@ services:
       - whisper_cache:/root/.cache/huggingface/hub
     env_file:
       - ./backend/.env
+    environment:
+      - AGENT_DB_PATH=/app/data/agent.db
+      - MEMORY_DB_PATH=/app/data/memory.db
     restart: unless-stopped
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -65,3 +67,4 @@ networks:
 volumes:
   hf_cache:
   whisper_cache:
+  rudran_data:

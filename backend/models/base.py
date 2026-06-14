@@ -20,7 +20,9 @@ import aiosqlite
 
 logger = logging.getLogger(__name__)
 
-DB_PATH = Path(__file__).parent.parent / "agent.db"
+import os
+ENV_DB_PATH = os.getenv("AGENT_DB_PATH")
+DB_PATH = Path(ENV_DB_PATH) if ENV_DB_PATH else Path(__file__).parent.parent / "agent.db"
 
 
 class DatabaseManager:

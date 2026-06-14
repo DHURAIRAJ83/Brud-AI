@@ -49,6 +49,7 @@ class Settings(BaseSettings):
     admin_api_key: str = "rudran_86e41d65f9c64383ba471056"
     admin_initial_password: Optional[str] = None
     cors_allowed_origins: str = ""
+    memory_db_path: str = "./memory.db"
 
     # Monetization
     billing_webhook_url: str = ""        # Stripe or custom webhook
