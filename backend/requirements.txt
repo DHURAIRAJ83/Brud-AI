@@ -40,5 +40,6 @@ psutil==5.9.8
 
 # ── Phase 5: Auth & Security ──────────────────────────────────
 python-jose[cryptography]==3.3.0
+bcrypt==4.0.1
 passlib[bcrypt]==1.7.4
 websockets==12.0
