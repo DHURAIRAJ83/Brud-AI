@@ -29,10 +29,37 @@ import importlib
 import importlib.util
 import logging
 import pkgutil
+import json
 from pathlib import Path
 from typing import Callable, Optional
 
 logger = logging.getLogger(__name__)
+
+# ── Plugin Persistence Helpers ────────────────────────────────────────────────
+CONFIG_FILE = Path(__file__).parent / "plugins" / "plugins_config.json"
+
+def get_plugin_status(name: str) -> bool:
+    try:
+        if CONFIG_FILE.exists():
+            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                return data.get(name, True)
+    except Exception:
+        pass
+    return True
+
+def set_plugin_status(name: str, enabled: bool):
+    try:
+        data = {}
+        if CONFIG_FILE.exists():
+            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        data[name] = enabled
+        CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+    except Exception as e:
+        logger.error("Failed to write plugin status: %s", e)
 
 
 # ── Plugin Registry ────────────────────────────────────────────────────────────
@@ -51,18 +78,37 @@ class PluginRegistry:
         source: str = "builtin",
     ):
         """Register an async tool function for one or more intents."""
+        plugin_name = name or fn.__name__
+        enabled = get_plugin_status(plugin_name)
         for intent in intents:
             self._tools[intent] = fn
             self._metadata[intent] = {
-                "name": name or fn.__name__,
+                "name": plugin_name,
                 "description": description,
                 "source": source,
                 "intents": intents,
+                "enabled": enabled,
             }
-        logger.info("Registered plugin '%s' for intents: %s", name or fn.__name__, intents)
+        logger.info("Registered plugin '%s' (enabled=%s) for intents: %s", plugin_name, enabled, intents)
 
     def get(self, intent: str) -> Optional[Callable]:
         return self._tools.get(intent)
+
+    def is_enabled(self, intent: str) -> bool:
+        meta = self._metadata.get(intent)
+        if not meta:
+            return False
+        return meta.get("enabled", True)
+
+    def toggle_plugin(self, name: str, enabled: bool) -> bool:
+        """Toggle enabled/disabled status of a plugin."""
+        set_plugin_status(name, enabled)
+        updated = False
+        for intent, meta in self._metadata.items():
+            if meta["name"] == name:
+                meta["enabled"] = enabled
+                updated = True
+        return updated
 
     def list_plugins(self) -> list[dict]:
         seen = set()
@@ -71,13 +117,28 @@ class PluginRegistry:
             key = meta["name"]
             if key not in seen:
                 seen.add(key)
-                result.append({**meta, "registered_intents": meta["intents"]})
+                result.append({
+                    "name": meta["name"],
+                    "description": meta["description"],
+                    "source": meta["source"],
+                    "intents": meta["intents"],
+                    "enabled": meta.get("enabled", True),
+                    "registered_intents": meta["intents"]
+                })
         return result
 
     def unregister(self, intent: str):
         self._tools.pop(intent, None)
         self._metadata.pop(intent, None)
         logger.info("Unregistered plugin for intent: %s", intent)
+
+    def unregister_plugin(self, name: str):
+        """Wipe all registered intents and metadata for a plugin name."""
+        intents_to_remove = [intent for intent, meta in self._metadata.items() if meta["name"] == name]
+        for intent in intents_to_remove:
+            self._tools.pop(intent, None)
+            self._metadata.pop(intent, None)
+        logger.info("Unregistered plugin name: %s", name)
 
     def intent_count(self) -> int:
         return len(self._tools)
@@ -101,6 +162,13 @@ class ToolEngine:
                 "result": f"No tool available for intent '{intent}'.",
                 "tool": intent,
                 "error": "not_found",
+            }
+        if not self.registry.is_enabled(intent):
+            logger.warning("Tool for intent '%s' is disabled.", intent)
+            return {
+                "result": f"Tool for intent '{intent}' is currently disabled.",
+                "tool": intent,
+                "error": "disabled",
             }
         try:
             logger.info("Executing tool: %s", intent)

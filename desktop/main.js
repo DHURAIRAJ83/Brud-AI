@@ -9,7 +9,7 @@
  *   4. Load React frontend
  */
 
-const { app, BrowserWindow, shell, ipcMain, Menu } = require('electron');
+const { app, BrowserWindow, shell, ipcMain, Menu, globalShortcut, Tray, Notification } = require('electron');
 const { spawn } = require('child_process');
 const path = require('path');
 const http = require('http');
@@ -89,6 +89,13 @@ function createWindow(url) {
   mainWindow.webContents.setWindowOpenHandler(({ url: u }) => {
     shell.openExternal(u);
     return { action: 'deny' };
+  });
+
+  mainWindow.on('close', (event) => {
+    if (!app.isQuitting) {
+      event.preventDefault();
+      mainWindow.hide();
+    }
   });
 
   mainWindow.on('closed', () => { mainWindow = null; });
@@ -236,8 +243,93 @@ function wizardHTML() {
 </html>`;
 }
 
+let tray = null;
+
+function createTray() {
+  let trayIconPath = path.join(__dirname, 'assets', 'icon.png');
+  try {
+    const fs = require('fs');
+    if (!fs.existsSync(trayIconPath)) {
+      trayIconPath = path.join(__dirname, '..', 'landing', 'public', 'favicon.ico');
+    }
+    if (!fs.existsSync(trayIconPath)) {
+      const { nativeImage } = require('electron');
+      tray = new Tray(nativeImage.createEmpty());
+    } else {
+      tray = new Tray(trayIconPath);
+    }
+  } catch (err) {
+    console.error('[Desktop] Failed to initialize tray icon, using empty tray', err);
+    const { nativeImage } = require('electron');
+    tray = new Tray(nativeImage.createEmpty());
+  }
+
+  const contextMenu = Menu.buildFromTemplate([
+    {
+      label: 'உதவியாளரைத் திற (Open Assistant)',
+      click: () => {
+        if (mainWindow) {
+          mainWindow.show();
+          mainWindow.focus();
+        }
+      }
+    },
+    {
+      label: 'சேவை நிலை (Check Status)',
+      click: async () => {
+        const alive = await probe(`${BACKEND_URL}/health`);
+        const statusMsg = alive ? 'FastAPI Backend is running | சேவை இயங்குகிறது' : 'FastAPI Backend is offline | சேவை நிறுத்தப்பட்டுள்ளது';
+        if (Notification.isSupported()) {
+          new Notification({
+            title: 'Tamil AI Status',
+            body: statusMsg,
+            silent: false
+          }).show();
+        }
+      }
+    },
+    { type: 'separator' },
+    {
+      label: 'வெளியேறு (Quit)',
+      click: () => {
+        app.isQuitting = true;
+        app.quit();
+      }
+    }
+  ]);
+
+  tray.setToolTip('Tamil AI Assistant');
+  tray.setContextMenu(contextMenu);
+
+  tray.on('double-click', () => {
+    if (mainWindow) {
+      if (mainWindow.isVisible()) {
+        mainWindow.hide();
+      } else {
+        mainWindow.show();
+        mainWindow.focus();
+      }
+    }
+  });
+}
+
+function registerHotkey() {
+  globalShortcut.register('Ctrl+Alt+V', () => {
+    if (mainWindow) {
+      if (mainWindow.isFocused() && mainWindow.isVisible()) {
+        mainWindow.hide();
+      } else {
+        mainWindow.show();
+        mainWindow.focus();
+      }
+    }
+  });
+}
+
 // ── App lifecycle ─────────────────────────────────────────────────────────────
 app.whenReady().then(async () => {
+  createTray();
+  registerHotkey();
   Menu.setApplicationMenu(null);
 
   // IPC: handle finish signal from wizard
@@ -319,5 +411,6 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
+  globalShortcut.unregisterAll();
   if (backendProcess) backendProcess.kill();
 });

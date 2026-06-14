@@ -22,7 +22,7 @@ class SetModeRequest(BaseModel):
 
 
 class SetModelRequest(BaseModel):
-    model: str  # "tinyllama" | "mistral" | "llama3"
+    model: str  # "tinyllama" | "mistral" | "llama3" | "qwen3:8b"
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -71,7 +71,7 @@ async def set_runtime_mode(body: SetModeRequest):
 @router.post("/runtime/model", summary="Override active AI model")
 async def set_active_model(body: SetModelRequest):
     """Set a specific model as the active model (overrides auto-routing)."""
-    valid = {"tinyllama", "mistral", "llama3"}
+    valid = {"tinyllama", "mistral", "llama3", "qwen3:8b"}
     if body.model not in valid:
         raise HTTPException(
             status_code=400,
@@ -90,7 +90,7 @@ async def list_models():
     ```json
     {
       "local": ["tinyllama", "mistral"],
-      "cloud": ["tinyllama", "mistral", "llama3"]
+      "cloud": ["tinyllama", "mistral", "llama3", "qwen3:8b"]
     }
     ```
     """

@@ -50,7 +50,8 @@ class SQLiteMemory:
                     session_id  TEXT PRIMARY KEY,
                     created_at  REAL NOT NULL,
                     last_active REAL NOT NULL,
-                    facts_json  TEXT DEFAULT '{}'
+                    facts_json  TEXT DEFAULT '{}',
+                    active_skill_id TEXT DEFAULT NULL
                 )
             """)
             await db.execute("""
@@ -67,6 +68,15 @@ class SQLiteMemory:
                 "CREATE INDEX IF NOT EXISTS idx_turns_session ON turns(session_id, timestamp)"
             )
             await db.commit()
+            
+            # Migration check: if active_skill_id is not yet in sessions table
+            try:
+                await db.execute("ALTER TABLE sessions ADD COLUMN active_skill_id TEXT DEFAULT NULL")
+                await db.commit()
+                logger.info("✅ SQLite memory migration: added active_skill_id to sessions")
+            except Exception:
+                pass
+                
         self._initialized = True
         logger.info("✅ SQLite memory initialized at %s", self.db_path)
 
@@ -81,6 +91,29 @@ class SQLiteMemory:
             "UPDATE sessions SET last_active=? WHERE session_id=?",
             (now, session_id)
         )
+
+    async def get_active_skill(self, session_id: str) -> Optional[str]:
+        """Get the active skill ID for a session."""
+        async with aiosqlite.connect(self.db_path) as db:
+            async with db.execute(
+                "SELECT active_skill_id FROM sessions WHERE session_id = ?",
+                (session_id,)
+            ) as cursor:
+                row = await cursor.fetchone()
+        if row:
+            return row[0]
+        return None
+
+    async def set_active_skill(self, session_id: str, skill_id: Optional[str]):
+        """Set the active skill ID for a session."""
+        async with aiosqlite.connect(self.db_path) as db:
+            await self._ensure_session(db, session_id)
+            await db.execute(
+                "UPDATE sessions SET active_skill_id = ? WHERE session_id = ?",
+                (skill_id, session_id)
+            )
+            await db.commit()
+
 
     # ── Add a turn ────────────────────────────────────────────────────────────
     async def add_turn(self, session_id: str, role: str, content: str):
@@ -201,6 +234,73 @@ class SQLiteMemory:
                 "created_at": r[1],
                 "last_active": r[2],
                 "turn_count": r[3],
+            }
+            for r in rows
+        ]
+
+    # ── Phase 5: Conversation History API ────────────────────────────────────
+
+    async def list_sessions(self, limit: int = 50) -> list[str]:
+        """Return list of session IDs ordered by most recent activity."""
+        async with aiosqlite.connect(self.db_path) as db:
+            async with db.execute(
+                "SELECT session_id FROM sessions ORDER BY last_active DESC LIMIT ?",
+                (limit,),
+            ) as c:
+                rows = await c.fetchall()
+        return [r[0] for r in rows]
+
+    async def get_turns(self, session_id: str) -> list[dict]:
+        """Return all turns for a session as list of dicts with ISO timestamps."""
+        import datetime as _dt
+        async with aiosqlite.connect(self.db_path) as db:
+            async with db.execute(
+                "SELECT role, content, timestamp FROM turns WHERE session_id=? ORDER BY timestamp ASC",
+                (session_id,),
+            ) as c:
+                rows = await c.fetchall()
+        return [
+            {
+                "role": r[0],
+                "content": r[1],
+                "timestamp": _dt.datetime.fromtimestamp(r[2], tz=_dt.timezone.utc).isoformat(),
+            }
+            for r in rows
+        ]
+
+    async def delete_session(self, session_id: str) -> int:
+        """Delete all turns and session record. Returns number of turns deleted."""
+        async with aiosqlite.connect(self.db_path) as db:
+            async with db.execute(
+                "SELECT COUNT(*) FROM turns WHERE session_id=?", (session_id,)
+            ) as c:
+                count = (await c.fetchone())[0]
+            await db.execute("DELETE FROM turns WHERE session_id=?", (session_id,))
+            await db.execute("DELETE FROM sessions WHERE session_id=?", (session_id,))
+            await db.commit()
+        logger.info("Deleted session %s (%d turns)", session_id, count)
+        return count
+
+    async def search_turns(self, query: str, limit: int = 30) -> list[dict]:
+        """Full-text search across all turn content (case-insensitive LIKE)."""
+        import datetime as _dt
+        pattern = f"%{query}%"
+        async with aiosqlite.connect(self.db_path) as db:
+            async with db.execute(
+                """SELECT session_id, role, content, timestamp
+                   FROM turns
+                   WHERE content LIKE ?
+                   ORDER BY timestamp DESC
+                   LIMIT ?""",
+                (pattern, limit),
+            ) as c:
+                rows = await c.fetchall()
+        return [
+            {
+                "session_id": r[0],
+                "role": r[1],
+                "content": r[2],
+                "timestamp": _dt.datetime.fromtimestamp(r[3], tz=_dt.timezone.utc).isoformat(),
             }
             for r in rows
         ]

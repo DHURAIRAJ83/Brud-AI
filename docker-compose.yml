@@ -1,0 +1,67 @@
+version: "3.8"
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: rudran_backend
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - ./backend/agent.db:/app/agent.db
+      - ./backend/memory.db:/app/memory.db
+      - ./backend/uploads:/app/uploads
+      - ./backend/tools/plugins:/app/tools/plugins
+      - ./backend/models:/app/models
+      - hf_cache:/root/.cache/huggingface
+      - whisper_cache:/root/.cache/huggingface/hub
+    env_file:
+      - ./backend/.env
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - rudran_network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: rudran_frontend
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - rudran_network
+
+  dashboard:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+    container_name: rudran_dashboard
+    ports:
+      - "127.0.0.1:3001:3001"
+    depends_on:
+      - backend
+    env_file:
+      - ./dashboard/.env.local
+    restart: unless-stopped
+    networks:
+      - rudran_network
+
+networks:
+  rudran_network:
+    driver: bridge
+
+volumes:
+  hf_cache:
+  whisper_cache:

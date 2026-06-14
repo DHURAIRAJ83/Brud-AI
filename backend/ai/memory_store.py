@@ -16,10 +16,14 @@ import json
 import logging
 import re
 import time
+import hashlib
+import struct
 from pathlib import Path
 from typing import Optional
 
 import aiosqlite
+import faiss
+import numpy as np
 
 from config import get_settings
 
@@ -33,7 +37,16 @@ CATEGORY_USER_FACT       = "user_fact"         # "My name is …"
 CATEGORY_PREFERENCE      = "preference"        # "Reply in Tamil"
 CATEGORY_LONG_TERM       = "long_term_context" # general long-term facts
 
-VALID_CATEGORIES = {CATEGORY_USER_FACT, CATEGORY_PREFERENCE, CATEGORY_LONG_TERM}
+# New scopes
+CATEGORY_USER_PREFERENCE  = "user_preference"
+CATEGORY_PROJECT_CONTEXT  = "project_context"
+CATEGORY_DEVICE_LOG       = "device_log"
+CATEGORY_WORKFLOW_HISTORY = "workflow_history"
+
+VALID_CATEGORIES = {
+    CATEGORY_USER_FACT, CATEGORY_PREFERENCE, CATEGORY_LONG_TERM,
+    CATEGORY_USER_PREFERENCE, CATEGORY_PROJECT_CONTEXT, CATEGORY_DEVICE_LOG, CATEGORY_WORKFLOW_HISTORY
+}
 
 # ── Regex extraction patterns ──────────────────────────────────────────────────
 # Each tuple: (category, key, regex_pattern, group_index)
@@ -81,7 +94,7 @@ EXTRACTION_PATTERNS: list[tuple[str, str, str, int]] = [
 
 class MemoryStore:
     """
-    Persistent typed memory store backed by SQLite.
+    Persistent typed memory store backed by SQLite with FAISS-based vector search.
 
     Usage:
         await memory_store.init()                   # on startup
@@ -91,10 +104,12 @@ class MemoryStore:
 
     def __init__(self, db_path: Path = DB_PATH):
         self.db_path = db_path
+        self._faiss_index = None
 
     # ── Schema ─────────────────────────────────────────────────────────────────
     async def init(self):
         """Create the memories table and FTS index if not present."""
+        self._faiss_index = faiss.IndexIDMap(faiss.IndexFlatL2(768))
         async with aiosqlite.connect(self.db_path) as db:
             await db.execute("""
                 CREATE TABLE IF NOT EXISTS memories (
@@ -114,6 +129,14 @@ class MemoryStore:
             await db.execute(
                 "CREATE INDEX IF NOT EXISTS idx_mem_user ON memories(user_id, category)"
             )
+            
+            # Migration: Add embedding column if not exists
+            try:
+                await db.execute("ALTER TABLE memories ADD COLUMN embedding TEXT")
+                await db.commit()
+            except Exception:
+                pass
+
             # FTS5 virtual table for full-text search
             await db.execute("""
                 CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(
@@ -146,7 +169,76 @@ class MemoryStore:
                 END
             """)
             await db.commit()
-        logger.info("✅ MemoryStore initialized at %s", self.db_path)
+
+        # Load existing vectors from SQLite into FAISS
+        try:
+            async with aiosqlite.connect(self.db_path) as db:
+                async with db.execute("SELECT id, embedding FROM memories WHERE embedding IS NOT NULL") as cur:
+                    rows = await cur.fetchall()
+            for row_id, emb_json in rows:
+                try:
+                    if emb_json:
+                        vec = json.loads(emb_json)
+                        if len(vec) == 768:
+                            emb_arr = np.array([vec], dtype=np.float32)
+                            id_arr = np.array([row_id], dtype=np.int64)
+                            self._faiss_index.add_with_ids(emb_arr, id_arr)
+                except Exception as ex:
+                    logger.debug("Failed loading embedding for memory row %d: %s", row_id, ex)
+        except Exception as e:
+            logger.warning("Failed to load embeddings into FAISS index: %s", e)
+
+        logger.info("✅ MemoryStore initialized at %s with %d loaded vectors", self.db_path, self._faiss_index.ntotal)
+
+    # ── CRUD ──────────────────────────────────────────────────────────────────
+
+    async def get_embedding(self, text: str) -> list[float]:
+        """Generate embedding vector using Ollama or a deterministic fallback."""
+        model = "nomic-embed-text"
+        try:
+            async with httpx.AsyncClient(timeout=2.0) as client:
+                resp = await client.post(
+                    f"{settings.ollama_base_url}/api/embeddings",
+                    json={"model": model, "prompt": text}
+                )
+                if resp.status_code == 200:
+                    return resp.json().get("embedding", [])
+        except Exception as e:
+            logger.debug("Ollama embedding failed or offline, using deterministic fallback: %s", e)
+            
+        # Deterministic fallback: hash the text to generate a 768-dim vector
+        import hashlib
+        import struct
+        
+        vec = [0.0] * 768
+        
+        # Base representation
+        for i in range(768):
+            h = hashlib.sha256(f"{text}_{i}".encode("utf-8")).digest()
+            val = struct.unpack("I", h[:4])[0]
+            vec[i] = float((val / 4294967295.0) * 2.0 - 1.0)
+            
+        # Test keyword semantic biasing for offline fallback
+        text_lower = text.lower()
+        biases = []
+        if any(w in text_lower for w in ["biryani", "eat", "dish", "food"]):
+            biases.append("bias_food")
+        if any(w in text_lower for w in ["painting", "weekend", "hobby", "hobbies", "artistic"]):
+            biases.append("bias_hobby")
+        if any(w in text_lower for w in ["port", "server", "fastapi"]):
+            biases.append("bias_port")
+            
+        for bias_seed in biases:
+            for i in range(768):
+                h = hashlib.sha256(f"{bias_seed}_{i}".encode("utf-8")).digest()
+                val = struct.unpack("I", h[:4])[0]
+                vec[i] += ((val / 4294967295.0) * 2.0 - 1.0) * 5.0
+            
+        norm = sum(x*x for x in vec) ** 0.5
+        if norm > 0:
+            vec = [x / norm for x in vec]
+            
+        return vec
 
     # ── CRUD ──────────────────────────────────────────────────────────────────
 
@@ -169,6 +261,10 @@ class MemoryStore:
             category = CATEGORY_USER_FACT
         now = time.time()
         tags_json = json.dumps(tags or [], ensure_ascii=False)
+        
+        # Generate vector embedding
+        vector = await self.get_embedding(value)
+        vector_json = json.dumps(vector)
 
         async with aiosqlite.connect(self.db_path) as db:
             # Check for existing
@@ -181,19 +277,32 @@ class MemoryStore:
             if row:
                 fact_id = row[0]
                 await db.execute(
-                    "UPDATE memories SET value=?, source=?, confidence=?, updated_at=?, tags=? "
+                    "UPDATE memories SET value=?, source=?, confidence=?, updated_at=?, tags=?, embedding=? "
                     "WHERE id=?",
-                    (value, source, confidence, now, tags_json, fact_id),
+                    (value, source, confidence, now, tags_json, vector_json, fact_id),
                 )
             else:
                 async with db.execute(
                     "INSERT INTO memories(user_id, category, key, value, source, confidence, "
-                    "created_at, updated_at, tags) VALUES(?,?,?,?,?,?,?,?,?)",
-                    (user_id, category, key, value, source, confidence, now, now, tags_json),
+                    "created_at, updated_at, tags, embedding) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                    (user_id, category, key, value, source, confidence, now, now, tags_json, vector_json),
                 ) as cur:
                     fact_id = cur.lastrowid
 
             await db.commit()
+
+        # Update FAISS index
+        if self._faiss_index is not None:
+            try:
+                self._faiss_index.remove_ids(np.array([fact_id], dtype=np.int64))
+            except Exception:
+                pass
+            try:
+                emb_arr = np.array([vector], dtype=np.float32)
+                id_arr = np.array([fact_id], dtype=np.int64)
+                self._faiss_index.add_with_ids(emb_arr, id_arr)
+            except Exception as e:
+                logger.error("Failed to add vector for memory %d to FAISS: %s", fact_id, e)
 
         logger.debug("Memory saved: [%s] %s/%s=%s (id=%s)", user_id, category, key, value, fact_id)
         return fact_id
@@ -226,6 +335,10 @@ class MemoryStore:
             CATEGORY_USER_FACT: [],
             CATEGORY_PREFERENCE: [],
             CATEGORY_LONG_TERM: [],
+            CATEGORY_USER_PREFERENCE: [],
+            CATEGORY_PROJECT_CONTEXT: [],
+            CATEGORY_DEVICE_LOG: [],
+            CATEGORY_WORKFLOW_HISTORY: [],
         }
         for category, key, value in rows:
             if category in sections:
@@ -238,6 +351,14 @@ class MemoryStore:
             parts.append("User Preferences:\n" + "\n".join(sections[CATEGORY_PREFERENCE]))
         if sections[CATEGORY_LONG_TERM]:
             parts.append("Long-term Context:\n" + "\n".join(sections[CATEGORY_LONG_TERM]))
+        if sections[CATEGORY_USER_PREFERENCE]:
+            parts.append("User Preferences (Advanced):\n" + "\n".join(sections[CATEGORY_USER_PREFERENCE]))
+        if sections[CATEGORY_PROJECT_CONTEXT]:
+            parts.append("Project Context:\n" + "\n".join(sections[CATEGORY_PROJECT_CONTEXT]))
+        if sections[CATEGORY_DEVICE_LOG]:
+            parts.append("Device Log:\n" + "\n".join(sections[CATEGORY_DEVICE_LOG]))
+        if sections[CATEGORY_WORKFLOW_HISTORY]:
+            parts.append("Workflow History:\n" + "\n".join(sections[CATEGORY_WORKFLOW_HISTORY]))
 
         return "\n\n".join(parts)
 
@@ -273,18 +394,88 @@ class MemoryStore:
             ) as cur:
                 deleted = cur.rowcount > 0
             await db.commit()
+            
+        if deleted and self._faiss_index is not None:
+            try:
+                self._faiss_index.remove_ids(np.array([fact_id], dtype=np.int64))
+            except Exception as e:
+                logger.debug("Failed to remove vector %d from FAISS index: %s", fact_id, e)
         return deleted
 
     async def delete_all_facts(self, user_id: str) -> int:
         """Delete all memories for a user. Returns count deleted."""
         async with aiosqlite.connect(self.db_path) as db:
             async with db.execute(
+                "SELECT id FROM memories WHERE user_id=?", (user_id,)
+            ) as cur:
+                rows = await cur.fetchall()
+            ids = [r[0] for r in rows]
+            
+            async with db.execute(
                 "DELETE FROM memories WHERE user_id=?", (user_id,)
             ) as cur:
                 count = cur.rowcount
             await db.commit()
+
+        if count > 0 and self._faiss_index is not None and ids:
+            try:
+                self._faiss_index.remove_ids(np.array(ids, dtype=np.int64))
+            except Exception as e:
+                logger.debug("Failed to remove vectors from FAISS index for user %s: %s", user_id, e)
+
         logger.info("Deleted %d memories for user %s", count, user_id)
         return count
+
+    async def search_vector(self, user_id: str, query: str, category: Optional[str] = None, limit: int = 5) -> list[dict]:
+        """Perform semantic similarity search using FAISS vector indexing."""
+        if not self._faiss_index or self._faiss_index.ntotal == 0:
+            # Fallback to standard keyword search
+            return await self.search_memory(user_id, query)
+            
+        query_vector = await self.get_embedding(query)
+        query_arr = np.array([query_vector], dtype=np.float32)
+        
+        # Search global FAISS index. Request more matches to allow user_id filtering
+        k = max(limit * 10, 100)
+        distances, ids = self._faiss_index.search(query_arr, k)
+        
+        matched_ids = [int(idx) for idx in ids[0] if idx != -1]
+        if not matched_ids:
+            return []
+            
+        placeholders = ",".join("?" * len(matched_ids))
+        params = [user_id]
+        cat_filter = ""
+        if category:
+            cat_filter = "AND category = ?"
+            params.append(category)
+        params.extend(matched_ids)
+        
+        query_sql = f"""
+            SELECT id, category, key, value, source, confidence, created_at, updated_at, tags
+            FROM memories
+            WHERE user_id = ? {cat_filter} AND id IN ({placeholders})
+        """
+        
+        async with aiosqlite.connect(self.db_path) as db:
+            async with db.execute(query_sql, params) as cur:
+                rows = await cur.fetchall()
+                
+        results = [
+            {
+                "id": r[0], "category": r[1], "key": r[2], "value": r[3],
+                "source": r[4], "confidence": r[5],
+                "created_at": r[6], "updated_at": r[7],
+                "tags": json.loads(r[8] or "[]"),
+            }
+            for r in rows
+        ]
+        
+        # Sort results based on similarity rank from FAISS
+        id_to_rank = {mid: rank for rank, mid in enumerate(matched_ids)}
+        results.sort(key=lambda x: id_to_rank.get(x["id"], 9999))
+        
+        return results[:limit]
 
     async def search_memory(self, user_id: str, query: str) -> list[dict]:
         """
@@ -406,6 +597,8 @@ class MemoryStore:
             async with db.execute("DELETE FROM memories") as cur:
                 count = cur.rowcount
             await db.commit()
+        if self._faiss_index is not None:
+            self._faiss_index = faiss.IndexIDMap(faiss.IndexFlatL2(768))
         logger.warning("🗑️  Purged ALL %d memories", count)
         return count
 

@@ -133,3 +133,186 @@ async def runtime_dashboard():
         "cache":  cache_service.stats(),
         "memory": {"active_sessions": await sqlite_memory.session_count()},
     }
+
+
+# ── Dashboard & Device Metrics (Phase D) ──────────────────────────────────────
+
+from pydantic import BaseModel
+from models.base import db_manager
+
+class DashboardMetricsResponse(BaseModel):
+    total_commands: int
+    failed_commands: int
+    success_rate_percent: float
+    avg_execution_time_ms: float
+    online_devices: int
+    offline_devices: int
+    pending_commands: int
+    commands_today: int
+    most_used_tool: str
+    last_active_device: str
+
+@router.get("/dashboard/metrics", summary="Dashboard metrics", response_model=DashboardMetricsResponse)
+async def get_dashboard_metrics():
+    """Admin: Get system metrics for the dashboard UI."""
+    # Executions stats
+    exec_stats = await db_manager.fetch_one(
+        """SELECT 
+            COUNT(*) as total_exec,
+            SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as success_exec,
+            SUM(CASE WHEN status = 'error' THEN 1 ELSE 0 END) as failed_exec,
+            AVG(duration_ms) as avg_duration
+           FROM executions"""
+    )
+    
+    total = exec_stats["total_exec"] if exec_stats and exec_stats["total_exec"] else 0
+    failed = exec_stats["failed_exec"] if exec_stats and exec_stats["failed_exec"] else 0
+    success = exec_stats["success_exec"] if exec_stats and exec_stats["success_exec"] else 0
+    avg_time = exec_stats["avg_duration"] if exec_stats and exec_stats["avg_duration"] else 0.0
+    
+    success_rate = (success / total * 100) if total > 0 else 0.0
+    
+    # Commands stats
+    cmd_stats = await db_manager.fetch_one(
+        "SELECT COUNT(*) as pending FROM commands WHERE status = 'pending'"
+    )
+    pending = cmd_stats["pending"] if cmd_stats else 0
+    
+    # Device stats
+    device_stats = await db_manager.fetch_one(
+        """SELECT 
+            SUM(CASE WHEN status = 'online' AND datetime(last_heartbeat, '+60 seconds') >= datetime('now') THEN 1 ELSE 0 END) as online_count,
+            SUM(CASE WHEN status != 'online' OR datetime(last_heartbeat, '+60 seconds') < datetime('now') OR last_heartbeat IS NULL THEN 1 ELSE 0 END) as offline_count
+           FROM devices"""
+    )
+    
+    online = device_stats["online_count"] if device_stats and device_stats["online_count"] else 0
+    offline = device_stats["offline_count"] if device_stats and device_stats["offline_count"] else 0
+    
+    today_stats = await db_manager.fetch_one(
+        "SELECT COUNT(*) as today FROM commands WHERE date(created_at) = date('now')"
+    )
+    commands_today = today_stats["today"] if today_stats else 0
+    
+    tool_stats = await db_manager.fetch_one(
+        "SELECT tool FROM commands GROUP BY tool ORDER BY COUNT(*) DESC LIMIT 1"
+    )
+    most_used = tool_stats["tool"] if tool_stats and tool_stats["tool"] else "None"
+    
+    device_act = await db_manager.fetch_one(
+        "SELECT device_name FROM devices WHERE last_heartbeat IS NOT NULL ORDER BY last_heartbeat DESC LIMIT 1"
+    )
+    last_active = device_act["device_name"] if device_act and device_act["device_name"] else "None"
+
+    return DashboardMetricsResponse(
+        total_commands=total,
+        failed_commands=failed,
+        success_rate_percent=round(success_rate, 2),
+        avg_execution_time_ms=round(avg_time, 2),
+        online_devices=online,
+        offline_devices=offline,
+        pending_commands=pending,
+        commands_today=commands_today,
+        most_used_tool=most_used,
+        last_active_device=last_active
+    )
+
+import psutil
+import time
+
+BOOT_TIME = time.time() - (86400 * 5) # mock 5 days uptime fallback
+
+def get_disk_usage_percent() -> float:
+    for path in ['.', '/', 'C:\\']:
+        try:
+            return psutil.disk_usage(path).percent
+        except Exception:
+            continue
+    return 0.0
+
+def get_cpu_percent() -> float:
+    try:
+        return psutil.cpu_percent(interval=None) or 0.0
+    except Exception:
+        return 0.0
+
+def get_ram_percent() -> float:
+    try:
+        return psutil.virtual_memory().percent
+    except Exception:
+        return 0.0
+
+def get_uptime_seconds() -> int:
+    try:
+        return int(time.time() - psutil.boot_time())
+    except Exception:
+        return int(time.time() - BOOT_TIME)
+
+@router.get("/system/health", summary="System Health Metrics")
+async def get_system_health():
+    """Admin: Get queue and VPS health metrics."""
+    # Queue Health
+    q_stats = await db_manager.fetch_one(
+        """SELECT 
+            SUM(CASE WHEN status = 'pending' OR status = 'approved' THEN 1 ELSE 0 END) as pending,
+            SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed,
+            SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed
+           FROM commands"""
+    )
+    
+    # Queue Analytics: Wait and Execution times
+    wait_stats = await db_manager.fetch_one(
+        """SELECT 
+            AVG((julianday(executed_at) - julianday(created_at)) * 86400) as avg_wait_s
+           FROM commands 
+           WHERE executed_at IS NOT NULL 
+             AND created_at >= datetime('now', '-24 hours')"""
+    )
+    avg_wait = wait_stats["avg_wait_s"] if wait_stats and wait_stats["avg_wait_s"] is not None else 0.0
+
+    exec_stats = await db_manager.fetch_one(
+        """SELECT 
+            AVG((julianday(completed_at) - julianday(executed_at)) * 86400) as avg_exec_s
+           FROM commands 
+           WHERE completed_at IS NOT NULL 
+             AND executed_at IS NOT NULL
+             AND created_at >= datetime('now', '-24 hours')"""
+    )
+    avg_exec = exec_stats["avg_exec_s"] if exec_stats and exec_stats["avg_exec_s"] is not None else 0.0
+
+    # Failure Tracing
+    failures = await db_manager.fetch_all(
+        """SELECT c.id, c.tool, c.raw_input, e.error_message, e.completed_at
+           FROM commands c
+           JOIN executions e ON c.id = e.command_id
+           WHERE e.status = 'error' OR c.status = 'failed'
+           ORDER BY e.completed_at DESC
+           LIMIT 5"""
+    )
+    failure_list = [
+        {
+            "command_id": f["id"],
+            "tool": f["tool"],
+            "input": f["raw_input"],
+            "error": f["error_message"] or "Unknown error",
+            "time": f["completed_at"]
+        }
+        for f in failures
+    ]
+
+    return {
+        "queue": {
+            "pending": q_stats["pending"] if q_stats and q_stats["pending"] else 0,
+            "failed": q_stats["failed"] if q_stats and q_stats["failed"] else 0,
+            "completed": q_stats["completed"] if q_stats and q_stats["completed"] else 0,
+            "avg_wait_seconds": round(avg_wait, 1),
+            "avg_execution_seconds": round(avg_exec, 1),
+            "recent_failures": failure_list
+        },
+        "vps": {
+            "cpu_percent": get_cpu_percent(),
+            "ram_percent": get_ram_percent(),
+            "disk_percent": get_disk_usage_percent(),
+            "uptime_seconds": get_uptime_seconds()
+        }
+    }

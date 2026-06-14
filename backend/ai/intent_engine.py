@@ -32,6 +32,7 @@ Classify the user message into exactly one of these intents:
 - translate   : user wants translation between Tamil and English
 - search_rag  : user wants to search uploaded documents/files
 - file_read   : user wants to read or extract content from a file
+- change_skill: user wants to switch or change to another skill profile or personality
 - unknown     : none of the above
 
 Rules:
@@ -52,6 +53,7 @@ class IntentEngine:
             "calculate": ["calculate", "math", "compute", "+", "-", "*", "/", "கணக்கு"],
             "translate": ["translate", "translation", "மொழிபெயர்", "to english", "to tamil"],
             "search_rag": ["find in", "search document", "from the file", "கோப்பில்"],
+            "change_skill": ["ஆக மாறு", "ஆக மாற்று", "change to", "switch to", "skills", "activate skill"],
         }
 
     def _quick_classify(self, text: str) -> Optional[dict]:

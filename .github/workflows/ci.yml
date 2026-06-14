@@ -1,0 +1,38 @@
+name: Rudran AI CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  test-backend:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.11"
+    - name: Install Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        cd backend
+        pip install -r requirements.txt
+    - name: Run Pytest (114/114)
+      run: |
+        cd backend
+        pytest -v
+
+  build-docker:
+    needs: test-backend
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: Build Backend Docker Image
+      run: docker build -t rudran-backend:latest ./backend
+    - name: Build Frontend Docker Image
+      run: docker build -t rudran-frontend:latest ./frontend
+    - name: Build Dashboard Docker Image
+      run: docker build -t rudran-dashboard:latest ./dashboard

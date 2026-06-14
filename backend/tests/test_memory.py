@@ -16,6 +16,10 @@ from ai.memory_store import (
     CATEGORY_USER_FACT,
     CATEGORY_PREFERENCE,
     CATEGORY_LONG_TERM,
+    CATEGORY_USER_PREFERENCE,
+    CATEGORY_PROJECT_CONTEXT,
+    CATEGORY_DEVICE_LOG,
+    CATEGORY_WORKFLOW_HISTORY,
 )
 
 
@@ -281,3 +285,60 @@ async def test_admin_memory_stats(app_client):
     assert resp.status_code == 200
     data = resp.json()
     assert "memory_store" in data
+
+
+@pytest.mark.asyncio
+async def test_new_memory_namespaces(store):
+    uid = "user_new_namespaces"
+    
+    # Save facts in the new categories
+    await store.save_fact(uid, "editor_theme", "dark", CATEGORY_USER_PREFERENCE)
+    await store.save_fact(uid, "active_workspace", "Tamil_AI", CATEGORY_PROJECT_CONTEXT)
+    await store.save_fact(uid, "cpu_usage", "45%", CATEGORY_DEVICE_LOG)
+    await store.save_fact(uid, "deploy_app", "git checkout -> npm install -> npm run build", CATEGORY_WORKFLOW_HISTORY)
+    
+    # Retrieve and verify all of them are formatted correctly
+    retrieved = await store.retrieve_facts(uid)
+    assert "User Preferences (Advanced)" in retrieved
+    assert "editor_theme: dark" in retrieved
+    assert "Project Context" in retrieved
+    assert "active_workspace: Tamil_AI" in retrieved
+    assert "Device Log" in retrieved
+    assert "cpu_usage: 45%" in retrieved
+    assert "Workflow History" in retrieved
+    assert "deploy_app" in retrieved
+
+
+@pytest.mark.asyncio
+async def test_faiss_semantic_search(store):
+    uid = "user_faiss"
+    
+    # Save distinctive facts
+    await store.save_fact(uid, "favorite_food", "I love eating delicious Biryani.", CATEGORY_USER_FACT)
+    await store.save_fact(uid, "hobby", "I enjoy painting landscapes during weekends.", CATEGORY_LONG_TERM)
+    
+    # Perform semantic searches
+    res1 = await store.search_vector(uid, "What is your favorite dish to eat?")
+    assert len(res1) >= 1
+    assert "Biryani" in res1[0]["value"]
+    
+    res2 = await store.search_vector(uid, "Tell me about your artistic weekend hobbies")
+    assert len(res2) >= 1
+    assert "painting" in res2[0]["value"]
+
+
+@pytest.mark.asyncio
+async def test_api_semantic_search(app_client):
+    # Save a fact via API
+    await app_client.post(
+        "/api/memory/api_faiss_user",
+        json={"key": "server_setup", "value": "FastAPI is running on port 8000.", "category": "project_context"},
+    )
+    
+    # Query via semantic search API endpoint
+    resp = await app_client.get("/api/memory/api_faiss_user/search?q=Which port does the web server run on?&semantic=true")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["semantic"] is True
+    assert data["total"] >= 1
+    assert "port 8000" in data["results"][0]["value"]

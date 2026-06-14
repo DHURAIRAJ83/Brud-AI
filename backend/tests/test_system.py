@@ -10,7 +10,7 @@ from httpx import AsyncClient, ASGITransport
 import sys, os
 
 # Make sure backend is on the path when running from repo root
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from main import app
 

@@ -1,0 +1,61 @@
+{
+  "name": "rudran-ai-vscode",
+  "displayName": "Rudran AI Developer Workspace",
+  "description": "Autonomous Tamil AI Programming and Workspace Integration Sidebar for VS Code",
+  "version": "1.0.0",
+  "publisher": "tamil-ai",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Linters",
+    "Formatters",
+    "Other"
+  ],
+  "activationEvents": [
+    "onView:rudran-ai-chat-sidebar"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "rudran-ai-sidebar",
+          "title": "Rudran AI",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "rudran-ai-sidebar": [
+        {
+          "type": "webview",
+          "id": "rudran-ai-chat-sidebar",
+          "name": "Rudran AI Assistant",
+          "visibility": "visible"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "rudran-ai-vscode.focus",
+        "title": "Rudran AI: Focus Sidebar Chat"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src --ext ts",
+    "test": "node ./out/test/runTest.js"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.80.0",
+    "@types/node": "^18.0.0",
+    "typescript": "^5.0.0",
+    "eslint": "^8.0.0"
+  }
+}

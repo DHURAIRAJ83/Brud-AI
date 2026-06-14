@@ -27,7 +27,7 @@ class SaveMemoryRequest(BaseModel):
     value: str = Field(..., min_length=1, max_length=2000, description="Memory value")
     category: str = Field(
         default=CATEGORY_USER_FACT,
-        description="user_fact | preference | long_term_context",
+        description="user_fact | preference | long_term_context | user_preference | project_context | device_log | workflow_history",
     )
     tags: Optional[list[str]] = Field(default=None, description="Optional tags")
 
@@ -112,19 +112,29 @@ async def delete_all_memories(user_id: str):
     return {"message": f"Deleted {count} memories.", "user_id": user_id, "deleted": count}
 
 
-@router.get("/memory/{user_id}/search", summary="Search memories by keyword")
+@router.get("/memory/{user_id}/search", summary="Search memories by keyword or semantically")
 async def search_memories(
     user_id: str,
     q: str = Query(..., min_length=1, description="Search query"),
+    semantic: bool = Query(False, description="Use semantic FAISS search if True"),
+    category: Optional[str] = Query(None, description="Optional category filter"),
 ):
     """
-    Full-text search over stored memory keys and values for this user.
-    Uses SQLite FTS5 with LIKE fallback.
+    Search over stored memory keys and values for this user.
+    If semantic is True, uses FAISS vector similarity search.
+    Otherwise, uses SQLite FTS5 with LIKE fallback.
     """
-    results = await memory_store.search_memory(user_id, q)
+    if semantic:
+        results = await memory_store.search_vector(user_id, q, category=category)
+    else:
+        results = await memory_store.search_memory(user_id, q)
+        if category:
+            results = [r for r in results if r["category"] == category]
+            
     return {
         "user_id": user_id,
         "query": q,
+        "semantic": semantic,
         "total": len(results),
         "results": results,
     }

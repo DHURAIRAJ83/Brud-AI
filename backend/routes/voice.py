@@ -51,11 +51,15 @@ async def transcribe(
         raise HTTPException(status_code=503, detail=str(e))
 
 
+from fastapi import Depends
+from services.auth_service import get_current_user
+
 @router.post("/voice/transcribe-and-chat", summary="Voice → Text → AI response (one-shot)")
 async def transcribe_and_chat(
     audio: UploadFile = File(...),
     session_id: Optional[str] = Form(None),
     language: Optional[str] = Form(None),
+    current_user: Optional[dict] = Depends(get_current_user),
 ):
     """
     Transcribe audio AND send the text through the AI pipeline in one call.
@@ -85,13 +89,17 @@ async def transcribe_and_chat(
 
     # Step 2: Send to AI orchestrator
     sid = session_id or str(uuid.uuid4())
+    user_id = current_user["id"] if current_user else "admin-user-123"
     try:
         ai_result = await orchestrator.process(
             user_message=transcribed_text,
             session_id=sid,
+            source="voice",
+            user_id=user_id
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"AI error: {e}")
+
 
     return {
         "transcription": stt_result,

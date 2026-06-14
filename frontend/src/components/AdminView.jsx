@@ -4,7 +4,9 @@ import {
   uploadFile, listFiles, deleteFile,
   getMetrics, setModelOverride,
   getRuntimeStatus, setRuntimeMode, setRuntimeModel, getModels, refreshRuntime, adminRuntimeDashboard,
+  adminListPlugins, adminTogglePlugin, adminUploadPlugin, adminDeletePlugin,
 } from '../services/api';
+import FineTuneWizard from './FineTuneWizard';
 
 function StatCard({ label, value, sub, icon, accent }) {
   return (
@@ -83,33 +85,199 @@ function MetricsTab({ metrics }) {
   );
 }
 
-function PluginsTab({ metrics }) {
-  const plugins = metrics?.plugins || [];
+function PluginsTab() {
+  const [plugins, setPlugins] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const [msg, setMsg] = useState('');
+  const fileInputRef = useRef(null);
+
+  const notify = (m) => { setMsg(m); setTimeout(() => setMsg(''), 4000); };
+
+  const fetchPlugins = async () => {
+    try {
+      const data = await adminListPlugins();
+      setPlugins(data);
+    } catch (e) {
+      notify(`❌ Failed to load plugins: ${e.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchPlugins();
+  }, []);
+
+  const handleToggle = async (name, currentStatus) => {
+    try {
+      await adminTogglePlugin(name, !currentStatus);
+      notify(`Updated "${name}" status`);
+      fetchPlugins();
+    } catch (e) {
+      notify(`❌ ${e.message}`);
+    }
+  };
+
+  const handleUpload = async (file) => {
+    if (!file) return;
+    if (!file.name.endsWith('.py')) {
+      notify('❌ Only .py files are supported');
+      return;
+    }
+    setUploading(true);
+    try {
+      const res = await adminUploadPlugin(file);
+      notify(res.message || '✅ Plugin uploaded successfully');
+      fetchPlugins();
+    } catch (e) {
+      notify(`❌ ${e.message}`);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDelete = async (name) => {
+    if (!confirm(`Are you sure you want to uninstall and delete "${name}"?`)) return;
+    try {
+      const res = await adminDeletePlugin(name);
+      notify(res.message || `Deleted "${name}"`);
+      fetchPlugins();
+    } catch (e) {
+      notify(`❌ ${e.message}`);
+    }
+  };
+
+  if (loading) return <div style={{ color: 'var(--color-text-muted)', padding: '1rem' }}>Loading plugins…</div>;
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-      {plugins.map((p, i) => (
-        <div key={i} className="card" style={{ flexDirection: 'row', alignItems: 'center', gap: '1rem' }}>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>{p.name}</div>
-            <div style={{ color: 'var(--color-text-muted)', fontSize: '0.78rem' }}>{p.description}</div>
-            <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.4rem', flexWrap: 'wrap' }}>
-              {(p.intents || []).map(intent => (
-                <span key={intent} className="intent-tag">{intent}</span>
-              ))}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+      {msg && (
+        <div style={{
+          padding: '0.75rem 1rem', borderRadius: 'var(--radius-md)',
+          background: msg.includes('❌') ? 'rgba(239,68,68,0.1)' : 'rgba(34,211,165,0.1)',
+          border: `1px solid ${msg.includes('❌') ? 'rgba(239,68,68,0.3)' : 'rgba(34,211,165,0.3)'}`,
+          color: msg.includes('❌') ? 'var(--color-error)' : 'var(--color-success)',
+          fontSize: '0.875rem',
+        }}>{msg}</div>
+      )}
+
+      {/* Upload Zone */}
+      <div className="card" style={{ border: '1px dashed var(--color-border)', background: 'var(--color-surface-2)', padding: '1.25rem' }}>
+        <div className="card-title">🔌 Install Custom Python Plugin</div>
+        <div
+          className={`drop-zone ${dragOver ? 'drag-over' : ''}`}
+          onClick={() => fileInputRef.current?.click()}
+          onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={(e) => { e.preventDefault(); setDragOver(false); handleUpload(e.dataTransfer.files[0]); }}
+          style={{
+            border: '2px dashed rgba(124,92,252,0.3)',
+            borderRadius: 'var(--radius-md)',
+            padding: '1.5rem',
+            textAlign: 'center',
+            cursor: 'pointer',
+            transition: 'all 0.2s',
+            background: dragOver ? 'rgba(124,92,252,0.08)' : 'transparent',
+          }}
+        >
+          <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>⚡</div>
+          <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>
+            {uploading ? 'Uploading and registering…' : 'Drag & drop plugin file here, or click to browse'}
+          </div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--color-text-faint)', marginTop: '0.25rem' }}>
+            Must be a valid Python (.py) file adhering to the Plugin Contract.
+          </div>
+        </div>
+        <input ref={fileInputRef} type="file" accept=".py" style={{ display: 'none' }}
+          onChange={e => handleUpload(e.target.files[0])} />
+      </div>
+
+      {/* Plugins Grid */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1rem' }}>
+        {plugins.map((p, i) => (
+          <div key={i} className="card" style={{
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+            gap: '1rem',
+            border: p.enabled ? '1px solid var(--color-border)' : '1px solid rgba(255,255,255,0.05)',
+            opacity: p.enabled ? 1 : 0.7,
+            transition: 'all 0.2s'
+          }}>
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <h4 style={{ fontWeight: 700, fontSize: '0.95rem', margin: 0 }}>{p.name}</h4>
+                <span style={{
+                  padding: '0.15rem 0.5rem',
+                  borderRadius: 'var(--radius-full)',
+                  background: p.source === 'builtin' ? 'rgba(34,211,165,0.1)' : 'rgba(124,92,252,0.1)',
+                  color: p.source === 'builtin' ? 'var(--color-success)' : 'var(--color-accent-light)',
+                  border: `1px solid ${p.source === 'builtin' ? 'rgba(34,211,165,0.3)' : 'rgba(124,92,252,0.3)'}`,
+                  fontSize: '0.68rem',
+                }}>
+                  {p.source === 'builtin' ? 'built-in' : 'plugin'}
+                </span>
+              </div>
+              <p style={{ color: 'var(--color-text-muted)', fontSize: '0.78rem', marginTop: '0.4rem', minHeight: '2rem' }}>
+                {p.description || 'No description provided.'}
+              </p>
+              <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap', marginTop: '0.5rem' }}>
+                {(p.intents || []).map(intent => (
+                  <span key={intent} className="intent-tag" style={{ fontSize: '0.7rem' }}>{intent}</span>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '0.75rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                {/* Toggle Switch */}
+                <label className="switch" style={{ position: 'relative', display: 'inline-block', width: '38px', height: '20px' }}>
+                  <input
+                    type="checkbox"
+                    checked={p.enabled}
+                    onChange={() => handleToggle(p.name, p.enabled)}
+                    style={{ opacity: 0, width: 0, height: 0 }}
+                  />
+                  <span style={{
+                    position: 'absolute',
+                    cursor: 'pointer',
+                    top: 0, left: 0, right: 0, bottom: 0,
+                    backgroundColor: p.enabled ? 'var(--color-accent)' : '#4b5563',
+                    borderRadius: '20px',
+                    transition: '0.2s',
+                  }}>
+                    <span style={{
+                      position: 'absolute',
+                      content: '""',
+                      height: '14px', width: '14px',
+                      left: p.enabled ? '20px' : '3px',
+                      bottom: '3px',
+                      backgroundColor: 'white',
+                      borderRadius: '50%',
+                      transition: '0.2s',
+                    }} />
+                  </span>
+                </label>
+                <span style={{ fontSize: '0.78rem', color: p.enabled ? 'var(--color-success)' : 'var(--color-text-muted)' }}>
+                  {p.enabled ? 'Active' : 'Disabled'}
+                </span>
+              </div>
+
+              {p.source !== 'builtin' && (
+                <button
+                  className="btn btn-danger"
+                  style={{ padding: '0.2rem 0.6rem', fontSize: '0.72rem' }}
+                  onClick={() => handleDelete(p.name)}
+                >
+                  Uninstall
+                </button>
+              )}
             </div>
           </div>
-          <span style={{
-            padding: '0.2rem 0.6rem',
-            borderRadius: 'var(--radius-full)',
-            background: p.source === 'builtin' ? 'rgba(34,211,165,0.1)' : 'rgba(124,92,252,0.1)',
-            color: p.source === 'builtin' ? 'var(--color-success)' : 'var(--color-accent-light)',
-            border: `1px solid ${p.source === 'builtin' ? 'rgba(34,211,165,0.3)' : 'rgba(124,92,252,0.3)'}`,
-            fontSize: '0.7rem',
-          }}>
-            {p.source === 'builtin' ? 'built-in' : 'plugin'}
-          </span>
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   );
 }
@@ -260,7 +428,7 @@ function RuntimeDashboardTab() {
       <div className="card">
         <div className="card-title">🤖 Active Model Override</div>
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-          {['tinyllama', 'mistral', 'llama3'].map(m => {
+          {['tinyllama', 'mistral', 'llama3', 'qwen3:8b'].map(m => {
             const isActive = (rt?.active_model || '') === m;
             return (
               <button key={m}
@@ -276,7 +444,7 @@ function RuntimeDashboardTab() {
                   fontWeight: isActive ? 700 : 500, transition: 'all 0.15s',
                 }}
               >
-                {m === 'tinyllama' ? '⚡' : m === 'mistral' ? '⚖️' : '🧠'} {m}
+                {m === 'tinyllama' ? '⚡' : m === 'mistral' ? '⚖️' : m === 'llama3' ? '🧠' : '🐉'} {m}
               </button>
             );
           })}
@@ -397,7 +565,7 @@ export default function AdminView() {
   };
 
   const files = status?.files || [];
-  const tabs = ['overview', 'runtime', 'metrics', 'plugins', 'routing', 'files'];
+  const tabs = ['overview', 'runtime', 'metrics', 'plugins', 'routing', 'files', 'fine-tuning'];
 
   return (
     <div className="admin-view">
@@ -467,7 +635,7 @@ export default function AdminView() {
       )}
 
       {activeTab === 'metrics'  && <MetricsTab metrics={metrics} />}
-      {activeTab === 'plugins'  && <PluginsTab metrics={metrics} />}
+      {activeTab === 'plugins'  && <PluginsTab />}
       {activeTab === 'runtime'  && <RuntimeDashboardTab />}
 
       {activeTab === 'routing' && (
@@ -499,6 +667,7 @@ export default function AdminView() {
                 <option value="tinyllama">tinyllama (Fast)</option>
                 <option value="mistral">mistral (Balanced)</option>
                 <option value="llama3">llama3 (Strong)</option>
+                <option value="qwen3:8b">qwen3:8b (Advanced)</option>
               </select>
               <button className="btn btn-primary" onClick={handleModelOverride}>Apply</button>
             </div>
@@ -550,6 +719,8 @@ export default function AdminView() {
           )}
         </div>
       )}
+
+      {activeTab === 'fine-tuning' && <FineTuneWizard />}
     </div>
   );
 }

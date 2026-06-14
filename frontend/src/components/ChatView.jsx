@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { runAgent, normalizeTamil, transcribeAudio, generateSpeech } from '../services/api';
+import { runAgent, normalizeTamil, transcribeAudio, generateSpeech, createChatWebSocket } from '../services/api';
 import { useRuntime } from '../App';
 import { CloudBanner } from './RuntimeWidget';
 
@@ -99,6 +99,12 @@ export default function ChatView({ sessionId }) {
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
 
+  const [useWebSocket, setUseWebSocket] = useState(false);
+  const [wsConnected, setWsConnected] = useState(false);
+  const wsRef = useRef(null);
+  const assistantMsgIdRef = useRef(null);
+  const accumulatedTextRef = useRef('');
+
   // Phase 4: Runtime context
   const { runtime, selectedModel } = useRuntime();
 
@@ -109,6 +115,91 @@ export default function ChatView({ sessionId }) {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
+
+  useEffect(() => {
+    if (!useWebSocket) {
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+        setWsConnected(false);
+      }
+      return;
+    }
+
+    let isMounted = true;
+    console.log("Connecting to Chat WebSocket...");
+
+    const onMessage = (data) => {
+      if (!isMounted) return;
+      if (data.type === 'error') {
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: `⚠️ ${data.detail || 'WebSocket Error'}`,
+          id: Date.now(),
+          error: true
+        }]);
+        setLoading(false);
+      } else if (data.type === 'meta') {
+        setMessages(prev => prev.map(m =>
+          m.id === assistantMsgIdRef.current
+            ? {
+                ...m,
+                intent: data.intent,
+                language: data.lang,
+                model_used: data.model,
+                tanglish_converted: data.tanglish,
+                normalized_input: data.normalized
+              }
+            : m
+        ));
+      } else if (data.type === 'token') {
+        if (data.error) {
+          accumulatedTextRef.current += `\n⚠️ ${data.error}`;
+          setMessages(prev => prev.map(m =>
+            m.id === assistantMsgIdRef.current ? { ...m, content: accumulatedTextRef.current, error: true } : m
+          ));
+        } else if (data.done) {
+          setMessages(prev => prev.map(m =>
+            m.id === assistantMsgIdRef.current ? { ...m, streaming: false } : m
+          ));
+          setLoading(false);
+        } else if (data.token) {
+          accumulatedTextRef.current += data.token;
+          setMessages(prev => prev.map(m =>
+            m.id === assistantMsgIdRef.current ? { ...m, content: accumulatedTextRef.current } : m
+          ));
+        }
+      }
+    };
+
+    const ws = createChatWebSocket(
+      onMessage,
+      () => {
+        if (isMounted) {
+          setWsConnected(true);
+          console.log("WebSocket connected");
+        }
+      },
+      () => {
+        if (isMounted) {
+          setWsConnected(false);
+          console.log("WebSocket disconnected");
+        }
+      },
+      (err) => {
+        console.error("WebSocket error:", err);
+      }
+    );
+
+    wsRef.current = ws;
+
+    return () => {
+      isMounted = false;
+      if (ws) {
+        ws.close();
+      }
+    };
+  }, [useWebSocket, sessionId]);
 
   const handlePlayTTS = async (text, lang) => {
     try {
@@ -202,6 +293,25 @@ export default function ChatView({ sessionId }) {
           agent_steps: data.steps,
           id: Date.now(),
         }]);
+      } else if (useWebSocket) {
+        if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+          throw new Error("WebSocket is not connected yet. Wait a moment or disable WebSocket mode.");
+        }
+        let assistantMsgId = Date.now();
+        assistantMsgIdRef.current = assistantMsgId;
+        accumulatedTextRef.current = '';
+
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: '',
+          id: assistantMsgId,
+          streaming: true
+        }]);
+
+        const payload = { message: msg, session_id: sessionId };
+        if (modelOverride) payload.model = modelOverride;
+
+        wsRef.current.send(JSON.stringify(payload));
       } else {
         // SSE real-time token streaming via POST /api/chat/stream
         const streamBody = { message: msg, session_id: sessionId };
@@ -290,10 +400,14 @@ export default function ChatView({ sessionId }) {
         content: `⚠️ ${err.message}`,
         id: Date.now(), error: true,
       }]);
+      setLoading(false); // Make sure loading state is cleared on WS send failure/error
     } finally {
-      setLoading(false);
+      // In WebSocket flow, we clear loading inside onMessage, NOT synchronously in finally
+      if (!useWebSocket) {
+        setLoading(false);
+      }
     }
-  }, [input, loading, sessionId, agentMode, selectedModel]);
+  }, [input, loading, sessionId, agentMode, selectedModel, useWebSocket]);
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
@@ -421,10 +535,30 @@ export default function ChatView({ sessionId }) {
           >
             🤖 {agentMode ? 'Agent Mode ON' : 'Agent Mode'}
           </button>
-          {agentMode && (
+          {agentMode ? (
             <span style={{ fontSize: '0.7rem', color: 'var(--color-accent-light)' }}>
               Multi-step reasoning enabled
             </span>
+          ) : (
+            <button
+              onClick={() => setUseWebSocket(w => !w)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '0.4rem',
+                padding: '0.25rem 0.75rem',
+                borderRadius: 'var(--radius-full)',
+                border: useWebSocket
+                  ? '1px solid rgba(16,185,129,0.6)'
+                  : '1px solid var(--color-border)',
+                background: useWebSocket ? 'rgba(16,185,129,0.2)' : 'transparent',
+                color: useWebSocket ? '#10b981' : 'var(--color-text-faint)',
+                cursor: 'pointer', fontSize: '0.75rem', fontFamily: 'inherit',
+                transition: 'all 0.2s ease',
+              }}
+              id="websocket-mode-toggle"
+              title="Toggle real-time WebSocket chat"
+            >
+              ⚡ {useWebSocket ? (wsConnected ? 'WebSocket Live' : 'WebSocket connecting...') : 'WebSocket Mode'}
+            </button>
           )}
         </div>
 

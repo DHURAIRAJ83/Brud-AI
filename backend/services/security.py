@@ -148,6 +148,10 @@ class SecurityMiddleware(BaseHTTPMiddleware):
     """
 
     async def dispatch(self, request: Request, call_next):
+        # ── Always pass through OPTIONS (CORS preflight) ──────────────────────
+        if request.method == "OPTIONS":
+            return await call_next(request)
+
         # Skip security for public paths
         if not getattr(settings, "security_enabled", False):
             return await call_next(request)

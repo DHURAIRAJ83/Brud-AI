@@ -34,7 +34,7 @@ def _patch_probe(mgr: RuntimeManager, local_ok: bool, cloud_ok: bool,
                  local_models=None, cloud_models=None):
     """Patch the internal _probe method with fixed results."""
     local_models = local_models or (["tinyllama", "mistral"] if local_ok else [])
-    cloud_models = cloud_models or (["tinyllama", "mistral", "llama3"] if cloud_ok else [])
+    cloud_models = cloud_models or (["tinyllama", "mistral", "llama3", "qwen3:8b"] if cloud_ok else [])
 
     async def fake_probe(url, timeout=4.0):
         if "localhost" in url or "127.0.0.1" in url:
@@ -83,7 +83,7 @@ async def test_cloud_available():
         alive = await mgr.check_cloud()
     assert alive is True
     assert mgr._cloud_available is True
-    assert "llama3" in mgr._cloud_models
+    assert "qwen3:8b" in mgr._cloud_models
 
 
 @pytest.mark.asyncio
@@ -262,10 +262,10 @@ def test_consent_fields_in_settings():
 async def test_list_models():
     mgr = make_manager("hybrid")
     mgr._local_models = ["tinyllama", "mistral"]
-    mgr._cloud_models = ["tinyllama", "mistral", "llama3"]
+    mgr._cloud_models = ["tinyllama", "mistral", "llama3", "qwen3:8b"]
     result = await mgr.list_models()
     assert result["local"] == ["tinyllama", "mistral"]
-    assert result["cloud"] == ["tinyllama", "mistral", "llama3"]
+    assert result["cloud"] == ["tinyllama", "mistral", "llama3", "qwen3:8b"]
 
 
 # ── Test: Status structure ────────────────────────────────────────────────────

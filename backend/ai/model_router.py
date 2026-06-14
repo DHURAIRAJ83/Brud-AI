@@ -31,9 +31,9 @@ class ModelTier(str, Enum):
 
 # Model tier configuration — edit to match your pulled models
 MODEL_REGISTRY: dict[ModelTier, str] = {
-    ModelTier.FAST:     "tinyllama",
-    ModelTier.BALANCED: "mistral",
-    ModelTier.STRONG:   "mistral",   # override if you have llama3
+    ModelTier.FAST:     "qwen3:8b",
+    ModelTier.BALANCED: "qwen3:8b",
+    ModelTier.STRONG:   "qwen3:8b",   # override if you have llama3
 }
 
 # Intent → complexity score (0=trivial, 1=simple, 2=complex)

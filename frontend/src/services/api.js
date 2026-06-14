@@ -1,13 +1,29 @@
 /**
- * Phase 2 API additions + Phase 4 Hybrid Runtime additions
+ * Phase 5 API — JWT auth header injection + Conversations + WebSocket helper
  */
 
-const BASE = 'http://localhost:8000/api';
+const BASE = '/api';
+
+function getToken() {
+  return localStorage.getItem('auth_token') || null;
+}
+
+function getCsrfToken() {
+  return localStorage.getItem('csrf_token') || null;
+}
 
 async function request(method, path, body = null, isFormData = false) {
-  const opts = {
-    method,
-    headers: isFormData ? {} : { 'Content-Type': 'application/json' },
+  const token = getToken();
+  const csrfToken = getCsrfToken();
+  const headers = isFormData ? {} : { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  if (csrfToken && ['POST', 'PUT', 'DELETE', 'PATCH'].includes(method.toUpperCase())) {
+    headers['X-CSRF-Token'] = csrfToken;
+  }
+  const opts = { 
+    method, 
+    headers,
+    credentials: 'include'
   };
   if (body) opts.body = isFormData ? body : JSON.stringify(body);
   const res = await fetch(`${BASE}${path}`, opts);
@@ -17,6 +33,7 @@ async function request(method, path, body = null, isFormData = false) {
   }
   return res.json();
 }
+
 
 // ── Chat ─────────────────────────────────────────────────────────────────────
 export const sendMessage = (message, sessionId) =>
@@ -68,10 +85,17 @@ export const transcribeAudio = (audioBlob, language = null) => {
 };
 
 export const generateSpeech = async (text, language = 'ta') => {
+  const token = getToken();
+  const csrfToken = getCsrfToken();
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
+
   const res = await fetch(`${BASE}/audio/speak`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify({ text, language }),
+    credentials: 'include'
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
@@ -129,3 +153,151 @@ export const refreshRuntime = () =>
 
 export const adminRuntimeDashboard = () =>
   request('GET', '/admin/runtime');
+
+// ── Plugins (Phase 5) ──────────────────────────────────────────────────────────
+export const adminListPlugins = () =>
+  request('GET', '/admin/plugins');
+
+export const adminTogglePlugin = (name, enabled) =>
+  request('POST', `/admin/plugins/${encodeURIComponent(name)}/toggle`, { enabled });
+
+export const adminUploadPlugin = (file) => {
+  const form = new FormData();
+  form.append('file', file);
+  return request('POST', '/admin/plugins/upload', form, true);
+};
+
+export const adminDeletePlugin = (name) =>
+  request('DELETE', `/admin/plugins/${encodeURIComponent(name)}`);
+
+// ── Fine-Tuning (Phase 5) ─────────────────────────────────────────────────────
+export const adminListFinetuneSessions = () =>
+  request('GET', '/admin/finetune/sessions');
+
+export const adminCurateDataset = (sessionIds, format = 'alpaca', censorWords = null) =>
+  request('POST', '/admin/finetune/curate', { session_ids: sessionIds, format, censor_words: censorWords });
+
+export const adminCreateCustomModel = (name, baseModel, systemPrompt, temperature = 0.7) =>
+  request('POST', '/admin/finetune/create-model', { name, base_model: baseModel, system_prompt: systemPrompt, temperature });
+
+
+// ── Auth (Phase 5) ────────────────────────────────────────────────────────────
+export const authRegister = (username, password, email = '', displayName = '') =>
+  request('POST', '/auth/register', { username, password, email, display_name: displayName });
+
+export const authLogin = (username, password) =>
+  request('POST', '/auth/login', { username, password });
+
+export const authMe = () =>
+  request('GET', '/auth/me');
+
+export const authLogout = () =>
+  request('POST', '/auth/logout');
+
+
+// ── Conversations (Phase 5) ───────────────────────────────────────────────────
+export const listConversations = (limit = 50) =>
+  request('GET', `/conversations?limit=${limit}`);
+
+export const getConversation = (sessionId) =>
+  request('GET', `/conversations/${sessionId}`);
+
+export const deleteConversation = (sessionId) =>
+  request('DELETE', `/conversations/${sessionId}`);
+
+export const searchConversations = (q, limit = 30) =>
+  request('GET', `/conversations/search?q=${encodeURIComponent(q)}&limit=${limit}`);
+
+export const exportConversation = (sessionId) =>
+  request('GET', `/conversations/${sessionId}/export`);
+
+
+// ── WebSocket Chat Factory (Phase 5) ─────────────────────────────────────────
+export function createChatWebSocket(onMessage, onOpen, onClose, onError) {
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  let wsHost = window.location.host;
+  if (
+    wsHost.includes('localhost:3000') ||
+    wsHost.includes('127.0.0.1:3000') ||
+    wsHost.includes('localhost:5173') ||
+    wsHost.includes('127.0.0.1:5173') ||
+    wsHost.includes('localhost:3001') ||
+    wsHost.includes('127.0.0.1:3001')
+  ) {
+    wsHost = 'localhost:8000';
+  }
+  const wsBase = `${protocol}//${wsHost}/api`;
+  const token = getToken();
+  const url = token
+    ? `${wsBase}/ws/chat?token=${token}`
+    : `${wsBase}/ws/chat`;
+
+  const ws = new WebSocket(url);
+  ws.onopen    = onOpen  || (() => {});
+  ws.onclose   = onClose || (() => {});
+  ws.onerror   = onError || (() => {});
+  ws.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      onMessage(data);
+    } catch { /* ignore malformed frames */ }
+  };
+  return ws;
+}
+
+// ── Skills Marketplace (Phase B) ─────────────────────────────────────────────
+export const getSkills = () => request('GET', '/skills');
+export const getSkill = (skillId) => request('GET', `/skills/${skillId}`);
+export const saveSkill = (data) => request('POST', '/skills', data);
+export const deleteSkill = (skillId) => request('DELETE', `/skills/${skillId}`);
+export const activateSkill = (sessionId, skillId) =>
+  request('POST', '/skills/activate', { session_id: sessionId, skill_id: skillId });
+
+// ── Voice Profiles & Biometrics (Phase B) ──────────────────────────────────────
+export const getVoiceProfiles = () => request('GET', '/voice/profiles');
+export const enrollVoiceProfile = (profileName, userId, audioBlobs) => {
+  const form = new FormData();
+  form.append('profile_name', profileName);
+  form.append('user_id', userId);
+  audioBlobs.forEach((blob, i) => {
+    form.append('audio_files', blob, `sample_${i}.wav`);
+  });
+  return request('POST', '/voice/enroll', form, true);
+};
+export const deleteVoiceProfile = (id) => request('DELETE', `/voice/profiles/${id}`);
+export const getLockoutStatus = () => request('GET', '/voice/lockout-status');
+export const getVoiceAttempts = (limit = 50, offset = 0) =>
+  request('GET', `/voice/attempts?limit=${limit}&offset=${offset}`);
+export const getVoiceMetrics = () => request('GET', '/voice/metrics');
+export const getVoiceSecurityMetrics = () => request('GET', '/voice/security/metrics');
+export const triggerVoiceCleanup = () => request('POST', '/voice/admin/cleanup');
+
+// ── VS Code Extension Integration (Phase B) ───────────────────────────────────
+export const getVSCodeStatus = (sessionId = '') =>
+  request('GET', `/vscode/status${sessionId ? `?session_id=${sessionId}` : ''}`);
+export const updateVSCodeContext = (activeFile, cursorLine, activeSymbol) =>
+  request('POST', '/vscode/status/context', { active_file: activeFile, cursor_line: cursorLine, active_symbol: activeSymbol });
+export const getVSCodeContext = () => request('GET', '/vscode/status/context');
+export const executeVSCodeCommand = (command, params, sessionId = '') =>
+  request('POST', '/vscode/execute', { command, params, session_id: sessionId });
+export const scanWorkspaceCodebase = () => request('POST', '/vscode/index/scan');
+export const queryWorkspaceSymbols = (q) => request('GET', `/vscode/index/query?q=${encodeURIComponent(q)}`);
+
+// ── Automation (Phase B) ──────────────────────────────────────────────────────
+export const createCommand = (deviceId, tool, params, rawInput = '') =>
+  request('POST', '/v1/commands/create', {
+    device_id: deviceId,
+    tool,
+    params,
+    device_type: 'desktop',
+    priority: 3,
+    raw_input: rawInput,
+    source_language: 'en',
+    source: 'chat'
+  });
+export const getCommandsList = (limit = 100) => request('GET', '/v1/commands/?limit=' + limit);
+export const getLiveActivity = (limit = 50) => request('GET', '/v1/commands/activity?limit=' + limit);
+export const getDevicesList = () => request('GET', '/v1/devices/list');
+export const getSystemHealth = () => request('GET', '/v1/admin/system/health');
+export const getDashboardMetrics = () => request('GET', '/v1/admin/dashboard/metrics');
+

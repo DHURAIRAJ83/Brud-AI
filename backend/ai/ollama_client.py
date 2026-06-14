@@ -42,7 +42,7 @@ class OllamaClient:
                 "temperature": temperature,
                 "num_predict": max_tokens,
                 "num_ctx": 2048,          # Small context → faster on CPU
-                "num_thread": 4,           # Tune to your CPU core count
+                "num_thread": 2,           # Tune to your CPU core count
             },
         }
         if system:
@@ -87,6 +87,19 @@ class OllamaClient:
             r = await client.get(f"{self.base_url}/api/tags")
             r.raise_for_status()
             return [m["name"] for m in r.json().get("models", [])]
+
+    # ── Create model ──────────────────────────────────────────────────────────
+    async def create_model(self, name: str, modelfile: str) -> dict:
+        """Create a custom model via Ollama api/create."""
+        payload = {
+            "name": name,
+            "modelfile": modelfile,
+            "stream": False
+        }
+        async with httpx.AsyncClient(timeout=120) as client:
+            r = await client.post(f"{self.base_url}/api/create", json=payload)
+            r.raise_for_status()
+            return r.json()
 
 
 # Singleton

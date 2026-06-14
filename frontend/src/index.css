@@ -3,8 +3,10 @@
    Dark glassmorphism + vibrant accent palette
    ═══════════════════════════════════════════════════════════════════════════ */
 
-/* ── CSS Custom Properties ────────────────────────────────────────────────── */
-:root {
+/* ── CSS Custom Properties & Switchable Themes ───────────────────────────── */
+
+/* Default / Rudran Dark Theme variables applied to root */
+:root, .theme-rudran-dark {
   /* Palette */
   --color-bg:          #0a0a14;
   --color-surface:     #12121f;
@@ -63,6 +65,63 @@
   --shadow-lg:  0 8px 40px rgba(0, 0, 0, 0.5);
   --shadow-accent: 0 0 30px var(--color-accent-glow);
 }
+
+/* Tamil Heritage Theme variables */
+.theme-tamil-heritage {
+  --color-bg:          #2b050c;
+  --color-surface:     #3d0c15;
+  --color-surface-2:   #4f141e;
+  --color-surface-3:   #5c1b26;
+  --color-border:      rgba(217, 119, 6, 0.15);
+  --color-border-hover:rgba(217, 119, 6, 0.3);
+
+  --color-accent:      #d97706;
+  --color-accent-light:#f59e0b;
+  --color-accent-dark: #b45309;
+  --color-accent-glow: rgba(217, 119, 6, 0.25);
+
+  --color-teal:        #10b981;
+  --color-teal-glow:   rgba(16, 185, 129, 0.15);
+
+  --color-success:     #10b981;
+  --color-warning:     #f59e0b;
+  --color-error:       #ef4444;
+
+  --color-text:        #fef3c7;
+  --color-text-muted:  #d97706;
+  --color-text-faint:  #78350f;
+  
+  --shadow-accent:     0 0 30px rgba(217, 119, 6, 0.15);
+}
+
+/* Modern Light Theme variables */
+.theme-modern-light {
+  --color-bg:          #f8fafc;
+  --color-surface:     #ffffff;
+  --color-surface-2:   #f1f5f9;
+  --color-surface-3:   #e2e8f0;
+  --color-border:      rgba(0, 0, 0, 0.06);
+  --color-border-hover:rgba(0, 0, 0, 0.12);
+
+  --color-accent:      #2563eb;
+  --color-accent-light:#3b82f6;
+  --color-accent-dark: #1d4ed8;
+  --color-accent-glow: rgba(37, 99, 235, 0.15);
+
+  --color-teal:        #0d9488;
+  --color-teal-glow:   rgba(13, 148, 136, 0.15);
+
+  --color-success:     #10b981;
+  --color-warning:     #d97706;
+  --color-error:       #dc2626;
+
+  --color-text:        #0f172a;
+  --color-text-muted:  #475569;
+  --color-text-faint:  #94a3b8;
+  
+  --shadow-accent:     0 0 30px rgba(37, 99, 235, 0.08);
+}
+
 
 /* ── Reset ────────────────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }

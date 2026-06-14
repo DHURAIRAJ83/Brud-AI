@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     cloud_consent: bool = False         # set True once user consents
 
     # Smart Model Router (llm_ prefix avoids pydantic namespace conflict)
-    llm_fast: str = "tinyllama"
+    llm_fast: str = "qwen3:8b"
     llm_balanced: str = "tinyllama"  # Fallback to tinyllama if mistral isn't pulled yet
     llm_strong: str = "tinyllama"
 
@@ -43,8 +43,12 @@ class Settings(BaseSettings):
     cache_ttl_seconds: int = 300
 
     # Security
-    security_enabled: bool = False       # Set True in production
+    secret_key: Optional[str] = None     # Must be configured in .env for production
+    security_enabled: bool = True        # Secure-by-default for production
     api_keys: str = ""                   # "key1:admin,key2:standard"
+    admin_api_key: str = "rudran_86e41d65f9c64383ba471056"
+    admin_initial_password: Optional[str] = None
+    cors_allowed_origins: str = ""
 
     # Monetization
     billing_webhook_url: str = ""        # Stripe or custom webhook
@@ -53,6 +57,7 @@ class Settings(BaseSettings):
     # App
     app_env: str = "development"
     log_level: str = "INFO"
+    log_format_json: bool = False
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "protected_namespaces": ("settings_",)}
 

@@ -55,10 +55,11 @@ class UploadService:
         return files
 
     def delete(self, filename: str) -> bool:
-        target = self._upload_dir / filename
+        safe_name = Path(filename).name
+        target = self._upload_dir / safe_name
         if target.exists():
             target.unlink()
-            logger.info("Deleted: %s", filename)
+            logger.info("Deleted: %s", safe_name)
             return True
         return False
 
