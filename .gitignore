@@ -20,7 +20,8 @@ node_modules/
 build/
 dist/
 .env.local
-
+.env.staging
+.env.production
 # OS
 .DS_Store
 Thumbs.db

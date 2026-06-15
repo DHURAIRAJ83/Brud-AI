@@ -10,6 +10,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY backend/ /app/
 COPY agent/ /agent/
+COPY scripts/ /app/scripts/
 
 # Expose backend port
 EXPOSE 8000
