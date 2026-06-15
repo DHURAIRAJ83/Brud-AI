@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 
-const BASE = 'http://localhost:8000/api';
+const BASE = window.location.origin + '/api';
 
 async function authFetch(path, opts = {}) {
   const token = localStorage.getItem('auth_token');

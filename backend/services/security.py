@@ -46,7 +46,19 @@ RATE_LIMITS = {
 }
 
 # Public endpoints that don't require auth
-PUBLIC_PATHS = {"/", "/health", "/docs", "/openapi.json", "/redoc"}
+PUBLIC_PATHS = {
+    "/",
+    "",
+    "/health",
+    "/api/health",
+    "/docs",
+    "/openapi.json",
+    "/redoc",
+    "/api/auth/login",
+    "/api/auth/register",
+    "/api/auth/refresh",
+    "/api/auth/logout"
+}
 
 
 class ApiKeyManager:
@@ -96,7 +108,7 @@ class ApiKeyManager:
 
 
 class RateLimiter:
-    """Sliding window rate limiter per API key."""
+    """Sliding window rate limiter per API key or user ID."""
 
     def __init__(self):
         # key → deque of timestamps (within last 60s)
@@ -144,6 +156,7 @@ rate_limiter = RateLimiter()
 class SecurityMiddleware(BaseHTTPMiddleware):
     """
     FastAPI middleware for API key auth + rate limiting.
+    Allows authenticated users with valid JWT access tokens to pass without an API key.
     Adds X-Rate-Limit-* headers to all responses.
     """
 
@@ -157,10 +170,59 @@ class SecurityMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         path = request.url.path
-        if path in PUBLIC_PATHS or path.startswith("/docs") or path.startswith("/redoc"):
+        normalized_path = path.rstrip("/") if path != "/" else path
+        if normalized_path in PUBLIC_PATHS or path.startswith("/docs") or path.startswith("/redoc"):
             return await call_next(request)
 
-        # Extract API key
+        # ── Try JWT Bearer Authentication First ───────────────────────────────
+        auth_header = request.headers.get("Authorization")
+        user = None
+        if auth_header and auth_header.startswith("Bearer "):
+            token = auth_header.split(" ", 1)[1]
+            try:
+                from services.auth_service import decode_token
+                from models.user import UserModel
+                payload = decode_token(token)
+                user_id = payload.get("sub")
+                if user_id:
+                    user = await UserModel.get_by_id(user_id)
+            except Exception as e:
+                logger.debug("JWT token validation failed: %s", e)
+
+        if user:
+            # User is successfully authenticated via JWT. Rate limit based on user ID and role.
+            role = user.get("role", "standard")
+            allowed, rl_meta = rate_limiter.is_allowed(user["id"], role)
+            if not allowed:
+                return JSONResponse(
+                    status_code=429,
+                    headers={
+                        "X-Rate-Limit-Limit": str(rl_meta["limit"]),
+                        "X-Rate-Limit-Remaining": "0",
+                        "X-Rate-Limit-Reset": str(rl_meta["reset_in_seconds"]),
+                        "Retry-After": str(rl_meta["reset_in_seconds"]),
+                    },
+                    content={
+                        "detail": f"Rate limit exceeded. {rl_meta['limit']} requests/minute for '{role}' tier.",
+                        "reset_in_seconds": rl_meta["reset_in_seconds"],
+                    },
+                )
+
+            # Store user context details in request state for downstream dependencies
+            request.state.api_key = user.get("api_key")
+            request.state.tier = role
+
+            response = await call_next(request)
+
+            # Add rate limit headers
+            response.headers["X-Rate-Limit-Limit"] = str(rl_meta["limit"])
+            response.headers["X-Rate-Limit-Remaining"] = str(rl_meta["remaining"])
+            response.headers["X-Rate-Limit-Reset"] = str(rl_meta["reset_in_seconds"])
+            response.headers["X-API-Tier"] = role
+
+            return response
+
+        # ── Fallback to API Key Authentication ────────────────────────────────
         api_key = (
             request.headers.get("X-API-Key")
             or request.query_params.get("api_key")
@@ -170,7 +232,7 @@ class SecurityMiddleware(BaseHTTPMiddleware):
             return JSONResponse(
                 status_code=401,
                 content={
-                    "detail": "API key required. Add X-API-Key header or ?api_key= param.",
+                    "detail": "API key or valid bearer token required. Add X-API-Key header or Authorization: Bearer <token>.",
                     "docs": "/docs",
                 },
             )

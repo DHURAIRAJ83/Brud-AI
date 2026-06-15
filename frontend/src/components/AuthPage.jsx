@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-const BASE = 'http://localhost:8000/api';
+const BASE = window.location.origin + '/api';
 
 async function apiPost(path, body) {
   const res = await fetch(`${BASE}${path}`, {

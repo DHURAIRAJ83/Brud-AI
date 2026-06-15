@@ -317,7 +317,7 @@ export default function ChatView({ sessionId }) {
         const streamBody = { message: msg, session_id: sessionId };
         if (modelOverride) streamBody.model = modelOverride;
 
-        const response = await fetch('http://localhost:8000/api/chat/stream', {
+        const response = await fetch(window.location.origin + '/api/chat/stream', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(streamBody),

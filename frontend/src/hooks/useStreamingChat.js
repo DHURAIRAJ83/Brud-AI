@@ -5,7 +5,7 @@
  */
 import { useState, useRef, useCallback } from 'react';
 
-const BASE = 'http://localhost:8000';
+const BASE = window.location.origin;
 
 export function useStreamingChat(sessionId) {
   const [messages, setMessages]   = useState([]);
