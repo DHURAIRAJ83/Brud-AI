@@ -13,9 +13,7 @@
     "Formatters",
     "Other"
   ],
-  "activationEvents": [
-    "onView:rudran-ai-chat-sidebar"
-  ],
+
   "main": "./out/extension.js",
   "contributes": {
     "viewsContainers": {
@@ -33,7 +31,8 @@
           "type": "webview",
           "id": "rudran-ai-chat-sidebar",
           "name": "Rudran AI Assistant",
-          "visibility": "visible"
+          "visibility": "visible",
+          "icon": "media/icon.svg"
         }
       ]
     },

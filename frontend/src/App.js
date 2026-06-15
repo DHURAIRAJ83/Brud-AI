@@ -92,7 +92,6 @@ function AppContent() {
     if (view === 'chat' && !authUser) {
       // Force Login/AuthPage representation first
       setAuthUser(undefined);
-      return;
     }
     
     setActiveView(view);
@@ -187,7 +186,7 @@ function AppContent() {
     return (
       <HomePage 
         authUser={authUser} 
-        onStartChat={() => setAuthUser(undefined)} 
+        onStartChat={() => navigate('chat')} 
         onNavigate={navigate} 
       />
     );
