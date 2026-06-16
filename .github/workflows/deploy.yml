@@ -20,6 +20,7 @@ jobs:
             echo "🚀 Starting Deployment on VPS..."
             cd /opt/Brud-AI || exit 1
             
+            PREV_COMMIT=$(git rev-parse HEAD)
             echo "📦 Fetching latest code from GitHub..."
             git fetch origin
             git reset --hard origin/main
@@ -36,7 +37,19 @@ jobs:
             echo "🔄 Restarting Containers..."
             docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
             
-            echo "🧹 Cleaning up old images..."
-            docker image prune -f
+            echo "⏳ Waiting for services to start..."
+            sleep 10
             
-            echo "✅ Deployment Successful!"
+            echo "🩺 Running Health Check..."
+            if curl -sS -m 5 http://localhost:8000/health | grep -q '"status":"ok"'; then
+                echo "✅ Deployment Successful and Healthy!"
+                echo "🧹 Cleaning up old images..."
+                docker image prune -f
+            else
+                echo "❌ Health check failed! Initiating rollback..."
+                docker compose -f docker-compose.yml -f docker-compose.prod.yml down
+                git reset --hard $PREV_COMMIT
+                docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+                echo "🔄 Rollback complete. Previous version restored."
+                exit 1
+            fi

@@ -261,37 +261,85 @@ app.include_router(audit.router,         prefix="/api/v1/audit", tags=["Audit Lo
 # ── Health check ──────────────────────────────────────────────────────────────
 @app.get("/health", summary="Health check")
 async def health():
+    import httpx
+    
+    db_ok = False
+    faiss_ok = False
+    ollama_ok = False
+    
+    async def check_db():
+        try:
+            await db_manager.fetch_one("SELECT 1")
+            return True
+        except Exception:
+            return False
+
+    async def check_faiss():
+        try:
+            from ai.rag_engine import rag_engine
+            return rag_engine.index is not None
+        except Exception:
+            return False
+
+    async def check_ollama():
+        try:
+            async with httpx.AsyncClient(timeout=1.0) as client:
+                resp = await client.get(settings.ollama_base_url)
+                return resp.status_code == 200
+        except Exception:
+            return False
+
+    try:
+        results = await asyncio.wait_for(
+            asyncio.gather(check_db(), check_faiss(), check_ollama()),
+            timeout=2.0
+        )
+        db_ok, faiss_ok, ollama_ok = results
+    except asyncio.TimeoutError:
+        logger.warning("Health check timed out during external checks.")
+        
     session_count = await sqlite_memory.session_count()
     turn_count    = await sqlite_memory.turn_count()
     runtime_status = await runtime_manager.get_runtime()
-    return {
-        "status": "ok",
-        "service": "Tamil AI Assistant",
-        "version": "5.0.0",
-        "features": [
-            "multi-step-agent", "smart-model-routing",
-            "tanglish-normalization", "rag",
-            "sqlite-persistent-memory",          # Phase 3
-            "streaming-sse",                     # Phase 3
-            "voice-stt-whisper",                 # Phase 3
-            "hybrid-ai-runtime",                 # Phase 4
-            "auto-failover-local-cloud",          # Phase 4
-            "plugin-system", "observability",
-            "api-security", "monetization",
-        ],
-        "runtime": {
-            "mode":            runtime_status["mode"],
-            "active":          runtime_status["runtime"],
-            "local_available": runtime_status["local_available"],
-            "cloud_available": runtime_status["cloud_available"],
-            "active_model":    runtime_status["active_model"],
-        },
-        "memory": {
-            "backend": "sqlite",
-            "sessions": session_count,
-            "total_turns": turn_count,
-        },
-    }
+    
+    status_code = 200 if (db_ok and ollama_ok) else 503
+    
+    return JSONResponse(
+        status_code=status_code,
+        content={
+            "status": "ok" if (db_ok and ollama_ok) else "degraded",
+            "service": "Tamil AI Assistant",
+            "version": "5.0.0",
+            "checks": {
+                "database": "ok" if db_ok else "error",
+                "faiss": "ok" if faiss_ok else "error",
+                "ollama": "ok" if ollama_ok else "error",
+            },
+            "features": [
+                "multi-step-agent", "smart-model-routing",
+                "tanglish-normalization", "rag",
+                "sqlite-persistent-memory",          # Phase 3
+                "streaming-sse",                     # Phase 3
+                "voice-stt-whisper",                 # Phase 3
+                "hybrid-ai-runtime",                 # Phase 4
+                "auto-failover-local-cloud",          # Phase 4
+                "plugin-system", "observability",
+                "api-security", "monetization",
+            ],
+            "runtime": {
+                "mode":            runtime_status["mode"],
+                "active":          runtime_status["runtime"],
+                "local_available": runtime_status["local_available"],
+                "cloud_available": runtime_status["cloud_available"],
+                "active_model":    runtime_status["active_model"],
+            },
+            "memory": {
+                "backend": "sqlite",
+                "sessions": session_count,
+                "total_turns": turn_count,
+            },
+        }
+    )
 
 
 @app.get("/", summary="Root")

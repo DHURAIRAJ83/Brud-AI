@@ -38,3 +38,20 @@ Two shell scripts are provided in the `scripts/` directory:
 - `./scripts/rollback.sh <backup_file>`: Stops the Docker containers, restores the databases from the backup archive, and restarts the services.
 
 We recommend configuring a daily cron job to run `backup.sh`.
+
+## 5. Future PostgreSQL Migration Path
+
+Currently, Rudran AI uses SQLite (`agent.db` and `memory.db`) for zero-configuration deployments. For high-availability, multi-node deployments, migrating to PostgreSQL is supported.
+
+### Migration Steps:
+1. Spin up a PostgreSQL container or managed service.
+2. Update `.env.production`:
+   ```env
+   # Replace sqlite connection with postgres
+   # DATABASE_URL=sqlite:////app/data/agent.db
+   DATABASE_URL=postgresql+asyncpg://user:password@host:5432/rudran
+   ```
+3. Update `backend/requirements.txt` to include `asyncpg` and `psycopg2-binary`.
+4. Update `models/base.py` to initialize an async SQLAlchemy engine instead of `aiosqlite`.
+5. Run a one-time data migration script to copy rows from SQLite `agent.db` to PostgreSQL.
+6. Remove `AGENT_DB_PATH` and `MEMORY_DB_PATH` from environment configurations.

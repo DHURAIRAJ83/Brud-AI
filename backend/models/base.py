@@ -290,6 +290,17 @@ class DatabaseManager:
                 FOREIGN KEY (device_id) REFERENCES devices(id) ON DELETE CASCADE
             );
 
+            -- Rate Limits
+            CREATE TABLE IF NOT EXISTS rate_limits (
+                id              TEXT PRIMARY KEY,
+                key_or_ip       TEXT UNIQUE NOT NULL,
+                tier            TEXT NOT NULL DEFAULT 'standard',
+                window_start    REAL NOT NULL,
+                request_count   INTEGER NOT NULL DEFAULT 0,
+                created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+                updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+
             -- Indexes for performance
             CREATE INDEX IF NOT EXISTS idx_devices_user_id ON devices(user_id);
             CREATE INDEX IF NOT EXISTS idx_devices_status ON devices(status);
@@ -312,6 +323,7 @@ class DatabaseManager:
             CREATE INDEX IF NOT EXISTS idx_voice_auth_sessions_user ON voice_auth_sessions(user_id);
             CREATE INDEX IF NOT EXISTS idx_refresh_tokens_hash ON refresh_tokens(token_hash);
             CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user ON refresh_tokens(user_id);
+            CREATE INDEX IF NOT EXISTS idx_rate_limits_key ON rate_limits(key_or_ip);
 
             -- Project Modules (Phase 13.5)
             CREATE TABLE IF NOT EXISTS project_modules (

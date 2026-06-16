@@ -25,8 +25,10 @@ Usage:
 
 import logging
 import time
-from collections import defaultdict, deque
+from collections import defaultdict
 from typing import Optional
+import uuid
+import asyncio
 
 from fastapi import Request, HTTPException
 from fastapi.responses import JSONResponse
@@ -108,44 +110,93 @@ class ApiKeyManager:
 
 
 class RateLimiter:
-    """Sliding window rate limiter per API key or user ID."""
+    """SQLite-backed sliding window rate limiter per API key or IP address."""
 
     def __init__(self):
-        # key → deque of timestamps (within last 60s)
-        self._windows: dict[str, deque] = defaultdict(lambda: deque())
+        self._last_cleanup = 0.0
 
-    def is_allowed(self, key: str, tier: str) -> tuple[bool, dict]:
+    async def is_allowed(self, key: str, tier: str) -> tuple[bool, dict]:
         """
         Check if request is within rate limit.
         Returns (allowed, metadata).
         """
+        from models.base import db_manager
+        
         limit = RATE_LIMITS.get(tier, RATE_LIMITS["standard"])
         now = time.time()
-        window = self._windows[key]
-
-        # Drop timestamps older than 60 seconds
-        while window and (now - window[0]) > 60:
-            window.popleft()
-
-        current_count = len(window)
-        remaining = max(0, limit - current_count)
-        reset_in = int(60 - (now - window[0])) if window else 60
-
-        if current_count >= limit:
+        
+        # Periodic cleanup (throttle to once every 5 mins)
+        if now - self._last_cleanup > 300:
+            asyncio.create_task(self._cleanup(now))
+            self._last_cleanup = now
+            
+        # Get or create rate limit record
+        row = await db_manager.fetch_one("SELECT * FROM rate_limits WHERE key_or_ip = ?", (key,))
+        
+        if not row:
+            # Create new record
+            record_id = str(uuid.uuid4())
+            await db_manager.execute(
+                "INSERT INTO rate_limits (id, key_or_ip, tier, window_start, request_count) VALUES (?, ?, ?, ?, ?)",
+                (record_id, key, tier, now, 1)
+            )
+            return True, {
+                "limit": limit,
+                "remaining": limit - 1,
+                "reset_in_seconds": 60,
+                "tier": tier,
+            }
+            
+        # Check window
+        window_start = row["window_start"]
+        request_count = row["request_count"]
+        
+        if now - window_start > 60:
+            # Reset window
+            await db_manager.execute(
+                "UPDATE rate_limits SET window_start = ?, request_count = 1, updated_at = datetime('now') WHERE key_or_ip = ?",
+                (now, key)
+            )
+            return True, {
+                "limit": limit,
+                "remaining": limit - 1,
+                "reset_in_seconds": 60,
+                "tier": tier,
+            }
+            
+        # Check limit
+        if request_count >= limit:
+            reset_in = int(60 - (now - window_start))
+            logger.warning("Rate limit exceeded for %s (tier: %s). Limit: %d", key, tier, limit)
             return False, {
                 "limit": limit,
                 "remaining": 0,
-                "reset_in_seconds": reset_in,
+                "reset_in_seconds": max(0, reset_in),
                 "tier": tier,
             }
-
-        window.append(now)
+            
+        # Increment count
+        await db_manager.execute(
+            "UPDATE rate_limits SET request_count = request_count + 1, updated_at = datetime('now') WHERE key_or_ip = ?",
+            (key,)
+        )
+        reset_in = int(60 - (now - window_start))
         return True, {
             "limit": limit,
-            "remaining": remaining - 1,
-            "reset_in_seconds": reset_in,
+            "remaining": limit - (request_count + 1),
+            "reset_in_seconds": max(0, reset_in),
             "tier": tier,
         }
+
+    async def _cleanup(self, now: float):
+        """Clean up old rate limits to keep database small."""
+        try:
+            from models.base import db_manager
+            # Delete records older than 5 minutes (300 seconds)
+            cutoff = now - 300
+            await db_manager.execute("DELETE FROM rate_limits WHERE window_start < ?", (cutoff,))
+        except Exception as e:
+            logger.error("Rate limiter cleanup failed: %s", e)
 
 
 # Singletons
@@ -165,6 +216,14 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         if request.method == "OPTIONS":
             return await call_next(request)
 
+        # ── Setup Real IP for logging and IP-based rate limit ───────────────
+        client_ip = request.client.host if request.client else "unknown"
+        real_ip = request.headers.get("X-Forwarded-For", request.headers.get("X-Real-IP", client_ip))
+        if real_ip and "," in real_ip:
+            real_ip = real_ip.split(",")[0].strip()
+            
+        is_loopback = real_ip in ("127.0.0.1", "::1", "testclient", "localhost")
+
         # Skip security for public paths
         if not getattr(settings, "security_enabled", False):
             return await call_next(request)
@@ -172,6 +231,23 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         path = request.url.path
         normalized_path = path.rstrip("/") if path != "/" else path
         if normalized_path in PUBLIC_PATHS or path.startswith("/docs") or path.startswith("/redoc"):
+            if not is_loopback:
+                # Apply IP-based rate limit for public endpoints
+                allowed, rl_meta = await rate_limiter.is_allowed(real_ip, "standard")
+                if not allowed:
+                    return JSONResponse(
+                        status_code=429,
+                        headers={
+                            "X-Rate-Limit-Limit": str(rl_meta["limit"]),
+                            "X-Rate-Limit-Remaining": "0",
+                            "X-Rate-Limit-Reset": str(rl_meta["reset_in_seconds"]),
+                            "Retry-After": str(rl_meta["reset_in_seconds"]),
+                        },
+                        content={
+                            "detail": f"Rate limit exceeded for IP. {rl_meta['limit']} requests/minute.",
+                            "reset_in_seconds": rl_meta["reset_in_seconds"],
+                        },
+                    )
             return await call_next(request)
 
         # ── Try JWT Bearer Authentication First ───────────────────────────────
@@ -187,12 +263,12 @@ class SecurityMiddleware(BaseHTTPMiddleware):
                 if user_id:
                     user = await UserModel.get_by_id(user_id)
             except Exception as e:
-                logger.debug("JWT token validation failed: %s", e)
+                logger.warning("JWT token validation failed for IP %s: %s", real_ip, e)
 
         if user:
             # User is successfully authenticated via JWT. Rate limit based on user ID and role.
             role = user.get("role", "standard")
-            allowed, rl_meta = rate_limiter.is_allowed(user["id"], role)
+            allowed, rl_meta = await rate_limiter.is_allowed(user["id"], role)
             if not allowed:
                 return JSONResponse(
                     status_code=429,
@@ -229,6 +305,7 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         )
 
         if not api_key:
+            logger.warning("Missing API key or JWT token from IP: %s", real_ip)
             return JSONResponse(
                 status_code=401,
                 content={
@@ -240,13 +317,14 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         # Validate key
         tier = api_key_manager.validate(api_key)
         if not tier:
+            logger.warning("Invalid API key used from IP: %s", real_ip)
             return JSONResponse(
                 status_code=403,
                 content={"detail": "Invalid or revoked API key."},
             )
 
         # Rate limit check
-        allowed, rl_meta = rate_limiter.is_allowed(api_key, tier)
+        allowed, rl_meta = await rate_limiter.is_allowed(api_key, tier)
         if not allowed:
             return JSONResponse(
                 status_code=429,

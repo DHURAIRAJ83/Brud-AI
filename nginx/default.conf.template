@@ -1,0 +1,88 @@
+events {
+    worker_connections 1024;
+}
+
+http {
+    include       mime.types;
+    default_type  application/octet-stream;
+    
+    sendfile        on;
+    keepalive_timeout  65;
+
+    # Backend Upstream
+    upstream backend {
+        server backend:${BACKEND_INTERNAL_PORT};
+    }
+
+    # Frontend Upstream
+    upstream frontend {
+        server frontend:${FRONTEND_INTERNAL_PORT};
+    }
+
+    # Dashboard Upstream
+    upstream dashboard {
+        server dashboard:${DASHBOARD_INTERNAL_PORT};
+    }
+
+    server {
+        listen 80;
+        server_name ${DOMAIN_NAME};
+
+        # Frontend (Public App)
+        location / {
+            proxy_pass http://frontend;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            
+            # WebSocket support
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+        }
+
+        # Dashboard (Admin Panel)
+        location /admin/ {
+            proxy_pass http://dashboard/;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            
+            # WebSocket support for Vite HMR / React
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+        }
+
+        # Backend APIs
+        location /api/ {
+            proxy_pass http://backend/api/;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            
+            # Important for CORS and avoiding timeouts with LLMs
+            proxy_read_timeout 300s;
+            proxy_connect_timeout 75s;
+        }
+
+        # Backend Static Files / Docs / Health
+        location /docs {
+            proxy_pass http://backend/docs;
+            proxy_set_header Host $host;
+        }
+        
+        location /openapi.json {
+            proxy_pass http://backend/openapi.json;
+            proxy_set_header Host $host;
+        }
+
+        location /health {
+            proxy_pass http://backend/health;
+            proxy_set_header Host $host;
+        }
+    }
+}
