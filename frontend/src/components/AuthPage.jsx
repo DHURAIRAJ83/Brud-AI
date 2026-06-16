@@ -31,6 +31,9 @@ export default function AuthPage({ onLogin }) {
         const data = await apiPost('/auth/login', { username, password });
         localStorage.setItem('auth_token', data.access_token);
         localStorage.setItem('auth_user', JSON.stringify(data.user));
+        if (data.csrf_token) {
+          localStorage.setItem('csrf_token', data.csrf_token);
+        }
         onLogin(data.user, data.access_token);
       } else {
         await apiPost('/auth/register', {
@@ -42,6 +45,9 @@ export default function AuthPage({ onLogin }) {
         const data = await apiPost('/auth/login', { username, password });
         localStorage.setItem('auth_token', data.access_token);
         localStorage.setItem('auth_user', JSON.stringify(data.user));
+        if (data.csrf_token) {
+          localStorage.setItem('csrf_token', data.csrf_token);
+        }
         onLogin(data.user, data.access_token);
       }
     } catch (err) {

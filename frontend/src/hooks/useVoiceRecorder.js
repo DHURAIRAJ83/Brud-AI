@@ -3,8 +3,7 @@
  * Records microphone audio and sends to /api/voice/transcribe-and-chat
  */
 import { useState, useRef, useCallback } from 'react';
-
-const BASE = window.location.origin;
+import { request } from '../services/api';
 
 export function useVoiceRecorder(sessionId, onResult) {
   const [recording, setRecording]   = useState(false);
@@ -49,11 +48,7 @@ export function useVoiceRecorder(sessionId, onResult) {
     if (sessionId) form.append('session_id', sessionId);
 
     try {
-      const res = await fetch(`${BASE}/api/voice/transcribe-and-chat`, {
-        method: 'POST', body: form,
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || 'Transcription failed');
+      const data = await request('POST', '/voice/transcribe-and-chat', form, true);
       onResult?.(data);
     } catch (err) {
       setError(err.message);

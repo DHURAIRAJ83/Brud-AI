@@ -7,7 +7,7 @@ import AuthPage from './components/AuthPage';
 import RuntimeWidget from './components/RuntimeWidget';
 import ModelSelector, { getSelectedModel } from './components/ModelSelector';
 import OnboardingModal from './components/OnboardingModal';
-import { systemStatus, getRuntimeStatus } from './services/api';
+import { systemStatus, getRuntimeStatus, authLogout } from './services/api';
 
 // New components & sub-pages
 import HomePage from './components/HomePage';
@@ -87,6 +87,15 @@ function AppContent() {
     setAuthChecked(true);
   }, []);
 
+  useEffect(() => {
+    const handleAuthLogout = () => {
+      setAuthUser(undefined);
+      navigate('home');
+    };
+    window.addEventListener('auth-logout', handleAuthLogout);
+    return () => window.removeEventListener('auth-logout', handleAuthLogout);
+  }, []);
+
   const navigate = (view) => {
     // Auth Gates & Dashboard redirects
     if (view === 'chat' && !authUser) {
@@ -125,9 +134,15 @@ function AppContent() {
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await authLogout();
+    } catch (err) {
+      console.warn("Backend logout failed", err);
+    }
     localStorage.removeItem('auth_token');
     localStorage.removeItem('auth_user');
+    localStorage.removeItem('csrf_token');
     setAuthUser(undefined); // forces redirect to AuthPage
     navigate('home');
   };

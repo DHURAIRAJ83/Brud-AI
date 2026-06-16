@@ -1,19 +1,12 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
-
-const BASE = window.location.origin + '/api';
-
-async function authFetch(path, opts = {}) {
-  const token = localStorage.getItem('auth_token');
-  const headers = { ...(opts.headers || {}) };
-  if (token) headers['Authorization'] = `Bearer ${token}`;
-  const res = await fetch(`${BASE}${path}`, { ...opts, headers });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || `HTTP ${res.status}`);
-  }
-  return res.json();
-}
+import {
+  listConversations,
+  getConversation,
+  deleteConversation,
+  searchConversations,
+  exportConversation
+} from '../services/api';
 
 function formatDate(iso) {
   if (!iso) return '—';
@@ -79,7 +72,7 @@ export default function ConversationsView({ sessionId }) {
   const loadSessions = useCallback(async () => {
     setLoadingSessions(true);
     try {
-      const data = await authFetch('/conversations');
+      const data = await listConversations();
       setSessions(data.sessions || []);
     } catch (err) {
       console.error('Failed to load sessions:', err);
@@ -96,7 +89,7 @@ export default function ConversationsView({ sessionId }) {
     setSearchResults(null);
     setLoadingTurns(true);
     try {
-      const data = await authFetch(`/conversations/${sid}`);
+      const data = await getConversation(sid);
       setTurns(data.turns || []);
     } catch (err) {
       console.error('Failed to load turns:', err);
@@ -118,7 +111,7 @@ export default function ConversationsView({ sessionId }) {
     searchTimeout.current = setTimeout(async () => {
       setSearching(true);
       try {
-        const data = await authFetch(`/conversations/search?q=${encodeURIComponent(searchQuery)}`);
+        const data = await searchConversations(searchQuery);
         setSearchResults(data.results || []);
       } catch { setSearchResults([]); }
       finally { setSearching(false); }
@@ -130,7 +123,7 @@ export default function ConversationsView({ sessionId }) {
     if (!window.confirm('Delete this conversation?')) return;
     setDeletingId(sid);
     try {
-      await authFetch(`/conversations/${sid}`, { method: 'DELETE' });
+      await deleteConversation(sid);
       setSessions(s => s.filter(x => x.session_id !== sid));
       if (selectedSession === sid) { setSelectedSession(null); setTurns([]); }
     } catch (err) { alert('Delete failed: ' + err.message); }
@@ -140,7 +133,7 @@ export default function ConversationsView({ sessionId }) {
   // Export as JSON
   const exportSession = async (sid) => {
     try {
-      const data = await authFetch(`/conversations/${sid}/export`);
+      const data = await exportConversation(sid);
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');

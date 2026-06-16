@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { runAgent, normalizeTamil, transcribeAudio, generateSpeech, createChatWebSocket } from '../services/api';
+import { runAgent, normalizeTamil, transcribeAudio, generateSpeech, createChatWebSocket, getOrPerformTokenRefresh, handleAuthExpiry } from '../services/api';
 import { useRuntime } from '../App';
 import { CloudBanner } from './RuntimeWidget';
 
@@ -317,11 +317,39 @@ export default function ChatView({ sessionId }) {
         const streamBody = { message: msg, session_id: sessionId };
         if (modelOverride) streamBody.model = modelOverride;
 
-        const response = await fetch(window.location.origin + '/api/chat/stream', {
+        const token = localStorage.getItem('auth_token');
+        const csrfToken = localStorage.getItem('csrf_token');
+        const headers = { 'Content-Type': 'application/json' };
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
+
+        let response = await fetch(window.location.origin + '/api/chat/stream', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers,
           body: JSON.stringify(streamBody),
         });
+        
+        if (response.status === 401 && csrfToken) {
+          try {
+            const newToken = await getOrPerformTokenRefresh();
+            const newCsrf = localStorage.getItem('csrf_token');
+            const retryHeaders = {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${newToken}`
+            };
+            if (newCsrf) retryHeaders['X-CSRF-Token'] = newCsrf;
+            
+            response = await fetch(window.location.origin + '/api/chat/stream', {
+              method: 'POST',
+              headers: retryHeaders,
+              body: JSON.stringify(streamBody),
+            });
+          } catch (refreshErr) {
+            console.error("Token refresh failed in ChatView streaming. Logging out...", refreshErr);
+            handleAuthExpiry();
+            throw refreshErr;
+          }
+        }
         
         if (!response.ok) {
           const err = await response.json().catch(() => ({ detail: response.statusText }));

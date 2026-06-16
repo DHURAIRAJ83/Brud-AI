@@ -4,15 +4,67 @@
 
 const BASE = '/api';
 
-function getToken() {
+export function getToken() {
   return localStorage.getItem('auth_token') || null;
 }
 
-function getCsrfToken() {
+export function getCsrfToken() {
   return localStorage.getItem('csrf_token') || null;
 }
 
-async function request(method, path, body = null, isFormData = false) {
+let refreshPromise = null;
+
+export async function getOrPerformTokenRefresh() {
+  if (refreshPromise) {
+    return refreshPromise;
+  }
+  
+  refreshPromise = (async () => {
+    try {
+      const csrfToken = getCsrfToken();
+      if (!csrfToken) {
+        throw new Error("No CSRF token for refresh");
+      }
+      
+      const res = await fetch(`${BASE}/auth/refresh`, {
+        method: 'POST',
+        headers: {
+          'X-CSRF-Token': csrfToken
+        },
+        credentials: 'include'
+      });
+      
+      if (!res.ok) {
+        throw new Error("Refresh token call failed");
+      }
+      
+      const data = await res.json();
+      if (data.access_token) {
+        localStorage.setItem('auth_token', data.access_token);
+      }
+      if (data.csrf_token) {
+        localStorage.setItem('csrf_token', data.csrf_token);
+      }
+      if (data.user) {
+        localStorage.setItem('auth_user', JSON.stringify(data.user));
+      }
+      return data.access_token;
+    } finally {
+      refreshPromise = null;
+    }
+  })();
+  
+  return refreshPromise;
+}
+
+export function handleAuthExpiry() {
+  localStorage.removeItem('auth_token');
+  localStorage.removeItem('auth_user');
+  localStorage.removeItem('csrf_token');
+  window.dispatchEvent(new Event('auth-logout'));
+}
+
+async function requestRaw(method, path, body = null, isFormData = false, isBlob = false) {
   const token = getToken();
   const csrfToken = getCsrfToken();
   const headers = isFormData ? {} : { 'Content-Type': 'application/json' };
@@ -26,12 +78,46 @@ async function request(method, path, body = null, isFormData = false) {
     credentials: 'include'
   };
   if (body) opts.body = isFormData ? body : JSON.stringify(body);
-  const res = await fetch(`${BASE}${path}`, opts);
+  
+  let res = await fetch(`${BASE}${path}`, opts);
+  
+  if (res.status === 401) {
+    if (
+      !path.startsWith('/auth/login') &&
+      !path.startsWith('/auth/register') &&
+      !path.startsWith('/auth/refresh') &&
+      !path.startsWith('/auth/logout')
+    ) {
+      if (csrfToken) {
+        try {
+          const newToken = await getOrPerformTokenRefresh();
+          const retryHeaders = { ...headers };
+          retryHeaders['Authorization'] = `Bearer ${newToken}`;
+          const newCsrf = getCsrfToken();
+          if (newCsrf && ['POST', 'PUT', 'DELETE', 'PATCH'].includes(method.toUpperCase())) {
+            retryHeaders['X-CSRF-Token'] = newCsrf;
+          }
+          const retryOpts = { ...opts, headers: retryHeaders };
+          res = await fetch(`${BASE}${path}`, retryOpts);
+        } catch (refreshErr) {
+          console.error("Token refresh failed. Logging out...", refreshErr);
+          handleAuthExpiry();
+          throw refreshErr;
+        }
+      }
+    }
+  }
+
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
     throw new Error(err.detail || `HTTP ${res.status}`);
   }
-  return res.json();
+  
+  return isBlob ? res.blob() : res.json();
+}
+
+export async function request(method, path, body = null, isFormData = false) {
+  return requestRaw(method, path, body, isFormData, false);
 }
 
 
@@ -47,6 +133,7 @@ export const runAgent = (query, sessionId, forceAgent = false) =>
 export const normalizeTamil = (text) =>
   request('POST', '/tamil/normalize', { text });
 
+// ── TanglishToTamil ───────────────────────────────────────────────────────────
 export const tanglishToTamil = (text) =>
   request('POST', '/tamil/tanglish-to-tamil', { text });
 
@@ -85,23 +172,7 @@ export const transcribeAudio = (audioBlob, language = null) => {
 };
 
 export const generateSpeech = async (text, language = 'ta') => {
-  const token = getToken();
-  const csrfToken = getCsrfToken();
-  const headers = { 'Content-Type': 'application/json' };
-  if (token) headers['Authorization'] = `Bearer ${token}`;
-  if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
-
-  const res = await fetch(`${BASE}/audio/speak`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({ text, language }),
-    credentials: 'include'
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(err.detail || `HTTP ${res.status}`);
-  }
-  return res.blob();
+  return requestRaw('POST', '/audio/speak', { text, language }, false, true);
 };
 
 // ── Memory (Task 3) ───────────────────────────────────────────────────────────
