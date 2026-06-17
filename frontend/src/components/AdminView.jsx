@@ -428,7 +428,7 @@ function RuntimeDashboardTab() {
       <div className="card">
         <div className="card-title">🤖 Active Model Override</div>
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-          {['tinyllama', 'mistral', 'llama3', 'qwen3:8b'].map(m => {
+          {['tinyllama', 'mistral', 'llama3', 'qwen2.5:3b'].map(m => {
             const isActive = (rt?.active_model || '') === m;
             return (
               <button key={m}
@@ -667,7 +667,7 @@ export default function AdminView() {
                 <option value="tinyllama">tinyllama (Fast)</option>
                 <option value="mistral">mistral (Balanced)</option>
                 <option value="llama3">llama3 (Strong)</option>
-                <option value="qwen3:8b">qwen3:8b (Advanced)</option>
+                <option value="qwen2.5:3b">qwen2.5:3b (Advanced)</option>
               </select>
               <button className="btn btn-primary" onClick={handleModelOverride}>Apply</button>
             </div>

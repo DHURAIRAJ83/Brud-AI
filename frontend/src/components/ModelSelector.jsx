@@ -11,7 +11,7 @@ const MODELS = [
   { value: 'tinyllama', label: '⚡ TinyLlama', desc: 'Fast · Simple queries'                   },
   { value: 'mistral',   label: '⚖️ Mistral',   desc: 'Balanced · Good for everyday queries'    },
   { value: 'llama3',    label: '🧠 Llama3',    desc: 'Powerful · Complex reasoning'            },
-  { value: 'qwen3:8b',  label: '🐉 Qwen3:8B',  desc: 'Advanced · Multilingual reasoning'       },
+  { value: 'qwen2.5:3b',  label: '🐉 Qwen2.5:3B',  desc: 'Advanced · Multilingual reasoning'       },
 ];
 
 const MODEL_COLORS = {
@@ -19,7 +19,7 @@ const MODEL_COLORS = {
   tinyllama: { color: '#22d3a5', bg: 'rgba(34,211,165,0.12)',  border: 'rgba(34,211,165,0.3)'  },
   mistral:   { color: '#f59e0b', bg: 'rgba(245,158,11,0.12)',  border: 'rgba(245,158,11,0.3)'  },
   llama3:    { color: '#60a5fa', bg: 'rgba(96,165,250,0.12)',  border: 'rgba(96,165,250,0.3)'  },
-  'qwen3:8b':{ color: '#ec4899', bg: 'rgba(236,72,153,0.12)',  border: 'rgba(236,72,153,0.3)'  },
+  'qwen2.5:3b':{ color: '#ec4899', bg: 'rgba(236,72,153,0.12)',  border: 'rgba(236,72,153,0.3)'  },
 };
 
 const LS_KEY = 'tamil_ai_model';

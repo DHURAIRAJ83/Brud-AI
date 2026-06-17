@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     cloud_consent: bool = False         # set True once user consents
 
     # Smart Model Router (llm_ prefix avoids pydantic namespace conflict)
-    llm_fast: str = "qwen3:8b"
+    llm_fast: str = "qwen2.5:3b"
     llm_balanced: str = "tinyllama"  # Fallback to tinyllama if mistral isn't pulled yet
     llm_strong: str = "tinyllama"
 

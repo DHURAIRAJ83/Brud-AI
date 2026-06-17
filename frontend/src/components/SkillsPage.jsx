@@ -144,7 +144,7 @@ export default function SkillsPage({ user, sessionId }) {
                 <option value="tinyllama">TinyLlama (Fast CPU)</option>
                 <option value="mistral">Mistral (Balanced)</option>
                 <option value="llama3">Llama3 (Advanced)</option>
-                <option value="qwen3:8b">Qwen3:8b (Code/Complex)</option>
+                <option value="qwen2.5:3b">Qwen2.5:3b (Code/Complex)</option>
               </select>
             </div>
           </div>
